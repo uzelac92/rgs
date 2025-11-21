@@ -41,5 +41,6 @@ func (h *RoundsReadHandler) GetRound(w http.ResponseWriter, r *http.Request) {
 	err = json.NewEncoder(w).Encode(round)
 	if err != nil {
 		log.Println("error encoding round", err)
+		return
 	}
 }

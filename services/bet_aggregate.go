@@ -4,22 +4,27 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"rgs/game"
 	"rgs/sqlc"
 )
 
 type BetAggregate struct {
 	queries *sqlc.Queries
+	wallet  *WalletClient
 }
 
-func NewBetAggregate(q *sqlc.Queries) *BetAggregate {
-	return &BetAggregate{queries: q}
+func NewBetAggregate(q *sqlc.Queries, w *WalletClient) *BetAggregate {
+	return &BetAggregate{
+		queries: q,
+		wallet:  w,
+	}
 }
 
 type PlaceBetParams struct {
 	OperatorID     int32
 	PlayerID       int32
-	RoundID        int32
 	Amount         float64
 	IdempotencyKey string
 }
@@ -38,10 +43,17 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 		OperatorID:     p.OperatorID,
 		IdempotencyKey: p.IdempotencyKey,
 	})
-
 	if err == nil {
 		round, _ := b.queries.GetRound(ctx, existing.RoundID)
 		return round, existing, nil
+	}
+
+	ok, err := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
+	if err != nil {
+		return sqlc.Round{}, sqlc.Bet{}, fmt.Errorf("wallet debit failed: %w", err)
+	}
+	if !ok {
+		return sqlc.Round{}, sqlc.Bet{}, errors.New("insufficient funds")
 	}
 
 	serverSeed, err := generateRandomSeed()
@@ -72,6 +84,15 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 	if pf.Outcome == 6 {
 		winAmount = p.Amount * 5
 		status = "won"
+	}
+
+	if status == "won" {
+		creditKey := p.IdempotencyKey + "-win"
+
+		ok, err = b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
+		if err != nil || !ok {
+			status = "pending_settlement"
+		}
 	}
 
 	bet, err := b.queries.CreateBet(ctx, sqlc.CreateBetParams{

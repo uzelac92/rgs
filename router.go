@@ -9,7 +9,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func SetupRouter(q *sqlc.Queries) *chi.Mux {
+func SetupRouter(q *sqlc.Queries, cfg Config) *chi.Mux {
+	walletClient := services.NewWalletClient(
+		cfg.WalletUrl,
+		cfg.WalletSecret,
+	)
+
 	r := chi.NewRouter()
 
 	opMiddleware := middleware.NewOperatorMiddleware(q)
@@ -27,7 +32,7 @@ func SetupRouter(q *sqlc.Queries) *chi.Mux {
 	r.Get("/sessions/verify", sessionsRead.VerifySession)
 
 	// Bets routing
-	betAgg := services.NewBetAggregate(q)
+	betAgg := services.NewBetAggregate(q, walletClient)
 	betsWrite := handlers.NewBetsWriteHandler(betAgg)
 
 	r.Post("/bets", betsWrite.PlaceBet)

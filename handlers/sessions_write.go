@@ -55,6 +55,7 @@ func (h *SessionsWriteHandler) LaunchSession(w http.ResponseWriter, r *http.Requ
 	err = json.NewEncoder(w).Encode(session)
 	if err != nil {
 		log.Println("error encoding session launch:", err)
+		return
 	}
 }
 
@@ -74,5 +75,6 @@ func (h *SessionsWriteHandler) RevokeSession(w http.ResponseWriter, r *http.Requ
 	_, err = w.Write([]byte("revoked"))
 	if err != nil {
 		log.Println("Error writing revocation response")
+		return
 	}
 }

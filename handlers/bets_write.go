@@ -58,5 +58,6 @@ func (h *BetsWriteHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
 		log.Println("error encoding placeBet", err)
+		return
 	}
 }

@@ -12,7 +12,7 @@ func main() {
 
 	q := sqlc.New(db)
 
-	r := SetupRouter(q)
+	r := SetupRouter(q, cfg)
 
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {

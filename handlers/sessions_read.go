@@ -36,5 +36,6 @@ func (h *SessionsReadHandler) VerifySession(w http.ResponseWriter, r *http.Reque
 	err = json.NewEncoder(w).Encode(session)
 	if err != nil {
 		log.Println("Error writing session verification response")
+		return
 	}
 }

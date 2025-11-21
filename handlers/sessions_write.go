@@ -27,6 +27,11 @@ type launchRequest struct {
 	TTL              int32  `json:"ttl_seconds"`
 }
 
+type launchResponse struct {
+	SessionToken string    `json:"session_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
 func (h *SessionsWriteHandler) LaunchSession(w http.ResponseWriter, r *http.Request) {
 	var req launchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -46,16 +51,18 @@ func (h *SessionsWriteHandler) LaunchSession(w http.ResponseWriter, r *http.Requ
 		Jurisdiction:     req.Jurisdiction,
 		TTL:              time.Duration(req.TTL) * time.Second,
 	})
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(session)
-	if err != nil {
-		log.Println("error encoding session launch:", err)
-		return
+	res := launchResponse{
+		SessionToken: session.LaunchToken,
+		ExpiresAt:    session.ExpiresAt,
+	}
+
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		log.Println("error encoding session response:", err)
 	}
 }
 

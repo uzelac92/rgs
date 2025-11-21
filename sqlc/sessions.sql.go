@@ -169,16 +169,23 @@ func (q *Queries) RevokeSession(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const verifySession = `-- name: VerifySession :one
-SELECT id, operator_id, player_id, launch_token, expires_at, revoked, created_at FROM sessions
-WHERE id = $1
+const verifySessionByToken = `-- name: VerifySessionByToken :one
+SELECT id, operator_id, player_id, launch_token, expires_at, revoked, created_at
+FROM sessions
+WHERE launch_token = $1
+  AND operator_id = $2
   AND revoked = FALSE
   AND expires_at > NOW()
     LIMIT 1
 `
 
-func (q *Queries) VerifySession(ctx context.Context, id uuid.UUID) (Session, error) {
-	row := q.db.QueryRowContext(ctx, verifySession, id)
+type VerifySessionByTokenParams struct {
+	LaunchToken string `json:"launch_token"`
+	OperatorID  int32  `json:"operator_id"`
+}
+
+func (q *Queries) VerifySessionByToken(ctx context.Context, arg VerifySessionByTokenParams) (Session, error) {
+	row := q.db.QueryRowContext(ctx, verifySessionByToken, arg.LaunchToken, arg.OperatorID)
 	var i Session
 	err := row.Scan(
 		&i.ID,

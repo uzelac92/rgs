@@ -1,14 +1,12 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"rgs/middleware"
 
 	"rgs/services"
-
-	"github.com/google/uuid"
 )
 
 type SessionsReadHandler struct {
@@ -20,22 +18,25 @@ func NewSessionsReadHandler(svc *services.SessionsService) *SessionsReadHandler 
 }
 
 func (h *SessionsReadHandler) VerifySession(w http.ResponseWriter, r *http.Request) {
-	idStr := r.URL.Query().Get("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+	token := r.URL.Query().Get("sess_token")
+	if token == "" {
+		http.Error(w, "missing sess_token", http.StatusBadRequest)
 		return
 	}
 
-	session, err := h.svc.VerifySession(context.Background(), id)
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+	operator, ok := middleware.OperatorFromContext(r.Context())
+	if !ok {
+		http.Error(w, "missing operator context", http.StatusUnauthorized)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(session)
+	session, err := h.svc.VerifySession(r.Context(), token, operator.ID)
 	if err != nil {
-		log.Println("Error writing session verification response")
+		http.Error(w, "invalid or expired session", http.StatusUnauthorized)
 		return
+	}
+
+	if errEncode := json.NewEncoder(w).Encode(session); errEncode != nil {
+		log.Println("failed to write session response:", errEncode)
 	}
 }

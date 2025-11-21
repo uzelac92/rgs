@@ -5,6 +5,7 @@
 package sqlc
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,16 @@ type Operator struct {
 	Name      string    `json:"name"`
 	ApiKey    string    `json:"api_key"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Outbox struct {
+	ID         int32        `json:"id"`
+	BetID      int32        `json:"bet_id"`
+	OperatorID int32        `json:"operator_id"`
+	PlayerID   int32        `json:"player_id"`
+	Amount     float64      `json:"amount"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+	Processed  sql.NullBool `json:"processed"`
 }
 
 type Player struct {

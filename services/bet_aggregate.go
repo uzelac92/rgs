@@ -38,6 +38,17 @@ func generateRandomSeed() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+func (b *BetAggregate) settleWin(ctx context.Context, p PlaceBetParams, winAmount float64) (string, error) {
+	creditKey := p.IdempotencyKey + "-win"
+
+	ok, err := b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
+	if err != nil || !ok {
+		return "pending_settlement", nil
+	}
+
+	return "won", nil
+}
+
 func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Round, sqlc.Bet, error) {
 	existing, err := b.queries.GetBetByIdempotency(ctx, sqlc.GetBetByIdempotencyParams{
 		OperatorID:     p.OperatorID,
@@ -83,16 +94,10 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 	status := "lost"
 	if pf.Outcome == 6 {
 		winAmount = p.Amount * 5
-		status = "won"
 	}
 
-	if status == "won" {
-		creditKey := p.IdempotencyKey + "-win"
-
-		ok, err = b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
-		if err != nil || !ok {
-			status = "pending_settlement"
-		}
+	if winAmount > 0 {
+		status, _ = b.settleWin(ctx, p, winAmount)
 	}
 
 	bet, err := b.queries.CreateBet(ctx, sqlc.CreateBetParams{
@@ -107,6 +112,15 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 	})
 	if err != nil {
 		return sqlc.Round{}, sqlc.Bet{}, err
+	}
+
+	if status == "pending_settlement" {
+		_, _ = b.queries.InsertOutbox(ctx, sqlc.InsertOutboxParams{
+			BetID:      bet.ID,
+			OperatorID: p.OperatorID,
+			PlayerID:   p.PlayerID,
+			Amount:     winAmount,
+		})
 	}
 
 	return round, bet, nil

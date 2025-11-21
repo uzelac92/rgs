@@ -17,7 +17,8 @@ SELECT * FROM bets
 WHERE round_id = $1
 ORDER BY id;
 
--- name: UpdateBetWin :exec
+-- name: MarkBetAsWon :exec
 UPDATE bets
-SET win_amount = $1, status = $2
-WHERE id = $3;
+SET status = 'won'
+WHERE id = $1
+    RETURNING *;

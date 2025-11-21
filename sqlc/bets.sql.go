@@ -126,19 +126,14 @@ func (q *Queries) GetBetsByRound(ctx context.Context, roundID int32) ([]Bet, err
 	return items, nil
 }
 
-const updateBetWin = `-- name: UpdateBetWin :exec
+const markBetAsWon = `-- name: MarkBetAsWon :exec
 UPDATE bets
-SET win_amount = $1, status = $2
-WHERE id = $3
+SET status = 'won'
+WHERE id = $1
+    RETURNING id, operator_id, player_id, round_id, amount, outcome, win_amount, status, idempotency_key, created_at
 `
 
-type UpdateBetWinParams struct {
-	WinAmount float64 `json:"win_amount"`
-	Status    string  `json:"status"`
-	ID        int32   `json:"id"`
-}
-
-func (q *Queries) UpdateBetWin(ctx context.Context, arg UpdateBetWinParams) error {
-	_, err := q.db.ExecContext(ctx, updateBetWin, arg.WinAmount, arg.Status, arg.ID)
+func (q *Queries) MarkBetAsWon(ctx context.Context, id int32) error {
+	_, err := q.db.ExecContext(ctx, markBetAsWon, id)
 	return err
 }

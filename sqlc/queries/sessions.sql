@@ -28,9 +28,11 @@ SELECT * FROM sessions
 WHERE id = $1
     LIMIT 1;
 
--- name: VerifySession :one
-SELECT * FROM sessions
-WHERE id = $1
+-- name: VerifySessionByToken :one
+SELECT *
+FROM sessions
+WHERE launch_token = $1
+  AND operator_id = $2
   AND revoked = FALSE
   AND expires_at > NOW()
     LIMIT 1;

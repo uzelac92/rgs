@@ -52,3 +52,13 @@ CREATE TABLE bets (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (idempotency_key, operator_id)
 );
+
+CREATE TABLE outbox (
+    id SERIAL PRIMARY KEY,
+    bet_id INT NOT NULL,
+    operator_id INT NOT NULL,
+    player_id INT NOT NULL,
+    amount NUMERIC(18,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    processed BOOLEAN DEFAULT FALSE
+);

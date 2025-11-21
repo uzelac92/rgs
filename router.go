@@ -1,21 +1,29 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
+	"rgs/handlers"
+	"rgs/middleware"
+	"rgs/services"
+	"rgs/sqlc"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func SetupRouter() *chi.Mux {
+func SetupRouter(q *sqlc.Queries) *chi.Mux {
 	r := chi.NewRouter()
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("OK"))
-		if err != nil {
-			fmt.Println("Error writing health check response")
-		}
-	})
+	opMiddleware := middleware.NewOperatorMiddleware(q)
+	r.Use(opMiddleware.Handle)
+
+	sessionsSvc := services.NewSessionsService(q)
+
+	sessionsWrite := handlers.NewSessionsWriteHandler(sessionsSvc)
+	sessionsRead := handlers.NewSessionsReadHandler(sessionsSvc)
+
+	r.Post("/sessions/launch", sessionsWrite.LaunchSession)
+	r.Post("/sessions/revoke", sessionsWrite.RevokeSession)
+
+	r.Get("/sessions/verify", sessionsRead.VerifySession)
 
 	return r
 }

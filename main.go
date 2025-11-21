@@ -3,15 +3,16 @@ package main
 import (
 	"log"
 	"net/http"
+	"rgs/sqlc"
 )
 
 func main() {
 	cfg := LoadConfig()
+	db := ConnectDB(cfg)
 
-	_ = ConnectDB(cfg)
-	log.Println("Connected to PostgreSQL")
+	q := sqlc.New(db)
 
-	r := SetupRouter()
+	r := SetupRouter(q)
 
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {

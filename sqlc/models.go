@@ -10,27 +10,50 @@ import (
 	"github.com/google/uuid"
 )
 
+type Bet struct {
+	ID             int32     `json:"id"`
+	OperatorID     int32     `json:"operator_id"`
+	PlayerID       int32     `json:"player_id"`
+	RoundID        int32     `json:"round_id"`
+	Amount         float64   `json:"amount"`
+	Outcome        int32     `json:"outcome"`
+	WinAmount      float64   `json:"win_amount"`
+	Status         string    `json:"status"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type Operator struct {
-	ID        int32
-	Name      string
-	ApiKey    string
-	CreatedAt time.Time
+	ID        int32     `json:"id"`
+	Name      string    `json:"name"`
+	ApiKey    string    `json:"api_key"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Player struct {
-	ID               int32
-	OperatorID       int32
-	ExternalPlayerID string
-	Jurisdiction     string
-	CreatedAt        time.Time
+	ID               int32     `json:"id"`
+	OperatorID       int32     `json:"operator_id"`
+	ExternalPlayerID string    `json:"external_player_id"`
+	Jurisdiction     string    `json:"jurisdiction"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+type Round struct {
+	ID         int32     `json:"id"`
+	OperatorID int32     `json:"operator_id"`
+	PlayerID   int32     `json:"player_id"`
+	ServerSeed string    `json:"server_seed"`
+	ClientSeed string    `json:"client_seed"`
+	Outcome    int32     `json:"outcome"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type Session struct {
-	ID          uuid.UUID
-	OperatorID  int32
-	PlayerID    int32
-	LaunchToken string
-	ExpiresAt   time.Time
-	Revoked     bool
-	CreatedAt   time.Time
+	ID          uuid.UUID `json:"id"`
+	OperatorID  int32     `json:"operator_id"`
+	PlayerID    int32     `json:"player_id"`
+	LaunchToken string    `json:"launch_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Revoked     bool      `json:"revoked"`
+	CreatedAt   time.Time `json:"created_at"`
 }

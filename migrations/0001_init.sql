@@ -26,3 +26,29 @@ CREATE TABLE sessions (
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Rounds table
+CREATE TABLE rounds (
+    id SERIAL PRIMARY KEY,
+    operator_id INT NOT NULL REFERENCES operators(id),
+    player_id INT NOT NULL REFERENCES players(id),
+    server_seed TEXT NOT NULL,
+    client_seed TEXT NOT NULL,
+    outcome INT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Bets table
+CREATE TABLE bets (
+    id SERIAL PRIMARY KEY,
+    operator_id INT NOT NULL REFERENCES operators(id),
+    player_id INT NOT NULL REFERENCES players(id),
+    round_id INT NOT NULL REFERENCES rounds(id),
+    amount NUMERIC(12,2) NOT NULL,
+    outcome INT NOT NULL,
+    win_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+    status TEXT NOT NULL, -- pending / won / lost
+    idempotency_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (idempotency_key, operator_id)
+);

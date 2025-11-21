@@ -19,8 +19,8 @@ VALUES ($1, $2)
 `
 
 type CreateOperatorParams struct {
-	Name   string
-	ApiKey string
+	Name   string `json:"name"`
+	ApiKey string `json:"api_key"`
 }
 
 func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) (Operator, error) {
@@ -42,9 +42,9 @@ VALUES ($1, $2, $3)
 `
 
 type CreatePlayerParams struct {
-	OperatorID       int32
-	ExternalPlayerID string
-	Jurisdiction     string
+	OperatorID       int32  `json:"operator_id"`
+	ExternalPlayerID string `json:"external_player_id"`
+	Jurisdiction     string `json:"jurisdiction"`
 }
 
 func (q *Queries) CreatePlayer(ctx context.Context, arg CreatePlayerParams) (Player, error) {
@@ -67,11 +67,11 @@ VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateSessionParams struct {
-	ID          uuid.UUID
-	OperatorID  int32
-	PlayerID    int32
-	LaunchToken string
-	ExpiresAt   time.Time
+	ID          uuid.UUID `json:"id"`
+	OperatorID  int32     `json:"operator_id"`
+	PlayerID    int32     `json:"player_id"`
+	LaunchToken string    `json:"launch_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
@@ -120,8 +120,8 @@ WHERE operator_id = $1 AND external_player_id = $2
 `
 
 type GetPlayerParams struct {
-	OperatorID       int32
-	ExternalPlayerID string
+	OperatorID       int32  `json:"operator_id"`
+	ExternalPlayerID string `json:"external_player_id"`
 }
 
 func (q *Queries) GetPlayer(ctx context.Context, arg GetPlayerParams) (Player, error) {

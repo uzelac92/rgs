@@ -26,17 +26,15 @@ func SetupRouter(q *sqlc.Queries) *chi.Mux {
 
 	r.Get("/sessions/verify", sessionsRead.VerifySession)
 
-	// Rounds routing
-	roundsSvc := services.NewRoundsService(q)
-	roundsWrite := handlers.NewRoundsWriteHandler(roundsSvc)
-
-	r.Post("/rounds/create", roundsWrite.CreateRound)
-
 	// Bets routing
 	betAgg := services.NewBetAggregate(q)
 	betsWrite := handlers.NewBetsWriteHandler(betAgg)
 
-	r.Post("/bets/place", betsWrite.PlaceBet)
+	r.Post("/bets", betsWrite.PlaceBet)
+
+	// Rounds routing
+	roundsRead := handlers.NewRoundsReadHandler(q)
+	r.Get("/rounds/{id}", roundsRead.GetRound)
 
 	return r
 }

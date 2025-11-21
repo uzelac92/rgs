@@ -36,20 +36,26 @@ func (h *BetsWriteHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bet, err := h.agg.PlaceBet(r.Context(), services.PlaceBetParams{
+	round, bet, err := h.agg.PlaceBet(r.Context(), services.PlaceBetParams{
 		OperatorID:     operator.ID,
 		PlayerID:       req.PlayerID,
-		RoundID:        req.RoundID,
 		Amount:         req.Amount,
 		IdempotencyKey: req.IdempotencyKey,
 	})
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(bet)
+	resp := struct {
+		BetID   int32 `json:"bet_id"`
+		RoundID int32 `json:"round_id"`
+	}{
+		BetID:   bet.ID,
+		RoundID: round.ID,
+	}
+
+	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
 		log.Println("error encoding placeBet", err)
 	}

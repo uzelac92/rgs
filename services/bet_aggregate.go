@@ -2,15 +2,10 @@ package services
 
 import (
 	"context"
-	"errors"
+	"crypto/rand"
+	"encoding/hex"
+	"rgs/game"
 	"rgs/sqlc"
-)
-
-var (
-	ErrDuplicateBet        = errors.New("duplicate bet: idempotency key already used")
-	ErrInvalidRound        = errors.New("round does not exist")
-	ErrWrongOperator       = errors.New("round does not belong to operator")
-	ErrRoundPlayerMismatch = errors.New("round does not belong to this player")
 )
 
 type BetAggregate struct {
@@ -29,50 +24,69 @@ type PlaceBetParams struct {
 	IdempotencyKey string
 }
 
-func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Bet, error) {
+func generateRandomSeed() (string, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Round, sqlc.Bet, error) {
 	existing, err := b.queries.GetBetByIdempotency(ctx, sqlc.GetBetByIdempotencyParams{
 		OperatorID:     p.OperatorID,
 		IdempotencyKey: p.IdempotencyKey,
 	})
 
 	if err == nil {
-		return existing, ErrDuplicateBet
+		round, _ := b.queries.GetRound(ctx, existing.RoundID)
+		return round, existing, nil
 	}
 
-	round, err := b.queries.GetRound(ctx, p.RoundID)
+	serverSeed, err := generateRandomSeed()
 	if err != nil {
-		return sqlc.Bet{}, ErrInvalidRound
+		return sqlc.Round{}, sqlc.Bet{}, err
 	}
 
-	if round.OperatorID != p.OperatorID {
-		return sqlc.Bet{}, ErrWrongOperator
+	clientSeed, err := generateRandomSeed()
+	if err != nil {
+		return sqlc.Round{}, sqlc.Bet{}, err
 	}
 
-	if round.PlayerID != p.PlayerID {
-		return sqlc.Bet{}, ErrRoundPlayerMismatch
+	pf := game.GenerateOutcome(serverSeed, clientSeed)
+
+	round, err := b.queries.CreateRound(ctx, sqlc.CreateRoundParams{
+		OperatorID: p.OperatorID,
+		PlayerID:   p.PlayerID,
+		ServerSeed: serverSeed,
+		ClientSeed: clientSeed,
+		Outcome:    pf.Outcome,
+	})
+	if err != nil {
+		return sqlc.Round{}, sqlc.Bet{}, err
 	}
 
 	winAmount := 0.0
 	status := "lost"
-	if round.Outcome == 6 {
-		winAmount = p.Amount * 2
+	if pf.Outcome == 6 {
+		winAmount = p.Amount * 5
 		status = "won"
 	}
 
 	bet, err := b.queries.CreateBet(ctx, sqlc.CreateBetParams{
 		OperatorID:     p.OperatorID,
 		PlayerID:       p.PlayerID,
-		RoundID:        p.RoundID,
+		RoundID:        round.ID,
 		Amount:         p.Amount,
-		Outcome:        round.Outcome,
+		Outcome:        pf.Outcome,
 		WinAmount:      winAmount,
 		Status:         status,
 		IdempotencyKey: p.IdempotencyKey,
 	})
-
 	if err != nil {
-		return sqlc.Bet{}, err
+		return sqlc.Round{}, sqlc.Bet{}, err
 	}
 
-	return bet, nil
+	return round, bet, nil
 }

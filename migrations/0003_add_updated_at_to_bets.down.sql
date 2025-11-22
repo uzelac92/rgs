@@ -1,0 +1,1 @@
+ALTER TABLE bets DROP COLUMN updated_at;

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 type BetAggregate struct {
@@ -156,9 +157,14 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 		}
 
 		observability.WalletDebitCalls.Inc()
-		ok, err := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
-		if err != nil || !ok {
+		ok, errDebit := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
+		if errDebit != nil || !ok {
 			observability.WalletDebitFailures.Inc()
+			errorMsg := "wallet debit failed"
+			if errDebit != nil {
+				errorMsg = errDebit.Error()
+			}
+			observability.Logger.Error("wallet debit failed", zap.Any("error", errorMsg))
 			return errors.New("wallet debit failed")
 		}
 
@@ -186,11 +192,10 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 		if status == "won" {
 			creditKey := p.IdempotencyKey + "-win"
 
-			ok, err := b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
-			if err != nil || !ok {
+			okCredit, errCredit := b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
+			if errCredit != nil || !okCredit {
 				status = "pending_settlement"
 
-				// Outbox fallback for async settlement
 				_, _ = q.InsertOutbox(ctx, sqlc.InsertOutboxParams{
 					BetID:      bet.ID,
 					OperatorID: p.OperatorID,

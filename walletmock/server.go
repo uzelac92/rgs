@@ -21,9 +21,16 @@ func NewServer() *Server {
 }
 
 func (s *Server) Run() {
-	http.HandleFunc("/wallet/debit", s.handlers.Debit)
-	http.HandleFunc("/wallet/credit", s.handlers.Credit)
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/wallet/debit", s.handlers.Debit)
+	mux.HandleFunc("/wallet/credit", s.handlers.Credit)
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
 
 	log.Println("Wallet mock running on :9000")
-	log.Fatal(http.ListenAndServe(":9000", nil))
+	log.Fatal(http.ListenAndServe(":9000", mux))
 }

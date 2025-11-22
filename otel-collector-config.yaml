@@ -5,17 +5,18 @@ receivers:
       http:
 
 exporters:
-  jaeger:
-    endpoint: "jaeger:14250"
+  otlp:
+    endpoint: jaeger:4317
     tls:
       insecure: true
 
 processors:
   batch:
+  memory_limiter:
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [jaeger]
+      exporters: [otlp]

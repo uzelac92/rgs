@@ -74,6 +74,7 @@ func (w *WalletClient) call(ctx context.Context, path string, playerID int32, am
 
 	resp, err := w.client.Do(httpReq)
 	if err != nil {
+		observability.Logger.Error("wallet http request failed", zap.Error(err))
 		return false, err
 	}
 	defer func(Body io.ReadCloser) {

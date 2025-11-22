@@ -12,6 +12,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "rgs" ]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
 
   migrate:
     image: migrate/migrate
@@ -33,14 +39,25 @@ services:
     ports:
       - "9000:9000"
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:9000/health" ]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 2s
 
   rgs:
     build: .
     depends_on:
-      - postgres
-      - walletmock
-      - migrate
-      - otel-collector        # 👈 add dependency
+      postgres:
+        condition: service_healthy
+      walletmock:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://rgs:rgs@postgres:5432/rgs?sslmode=disable
       WALLET_URL: http://walletmock:9000

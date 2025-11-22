@@ -34,9 +34,9 @@ type launchResponse struct {
 }
 
 func (h *SessionsHandler) VerifySession(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("sess_token")
+	token := r.URL.Query().Get("token")
 	if token == "" {
-		http.Error(w, "missing sess_token", http.StatusBadRequest)
+		http.Error(w, "missing token", http.StatusBadRequest)
 		return
 	}
 

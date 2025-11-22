@@ -1,6 +1,6 @@
 INSERT INTO operators (name, api_key, webhook_url, webhook_secret)
 VALUES
-    ('Demo Operator', 'demo-operator-key', 'http://localhost:9000/webhook', 'demo-secret')
+    ('Demo Operator', 'demo-operator-key', 'https://webhook.site/51380c55-679f-4468-9eb5-78235acc527e', 'demo-secret')
     ON CONFLICT DO NOTHING;
 
 WITH op AS (

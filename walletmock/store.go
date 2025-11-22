@@ -9,10 +9,15 @@ type Store struct {
 }
 
 func NewStore() *Store {
-	return &Store{
+	s := &Store{
 		balances: make(map[int32]float64),
 		idem:     make(map[string]bool),
 	}
+
+	// default balance for player with id 1
+	s.balances[1] = 100000
+
+	return s
 }
 
 func (s *Store) CheckIdempotent(key string) bool {

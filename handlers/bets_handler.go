@@ -48,7 +48,6 @@ func (h *BetsHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		observability.Logger.Error("error placing the bet", zap.Error(err))
 		return
 	}
 

@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-const Secret = "wallet-secret-key"
+const Secret = "testsecret123"
 
 func ValidSignature(player int32, amount float64, reqID, sig string) bool {
 	payload := fmt.Sprintf("%d:%f:%s", player, amount, reqID)

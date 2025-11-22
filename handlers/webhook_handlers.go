@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"rgs/middleware"
+	"rgs/observability"
 	"rgs/services"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 type WebhookHandler struct {
@@ -24,12 +25,14 @@ func (h *WebhookHandler) RetryWebhook(w http.ResponseWriter, r *http.Request) {
 	id64, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
+		observability.Logger.Error("retry webhook invalid", zap.Any("id", idStr), zap.Error(err))
 		return
 	}
 
 	err = h.svc.RetryWebhook(r.Context(), int32(id64))
 	if err != nil {
 		http.Error(w, "event not found", http.StatusNotFound)
+		observability.Logger.Error("retry webhook failed", zap.Error(err))
 		return
 	}
 
@@ -53,12 +56,13 @@ func (h *WebhookHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 	events, err := h.svc.ListWebhooks(r.Context(), operator.ID, status)
 	if err != nil {
 		http.Error(w, "failed to load webhooks", http.StatusInternalServerError)
+		observability.Logger.Error("failed to load webhooks", zap.Error(err))
 		return
 	}
 
 	err = json.NewEncoder(w).Encode(events)
 	if err != nil {
-		log.Println("failed to encode webhooks")
+		observability.Logger.Error("failed to encode webhooks", zap.Error(err))
 		return
 	}
 }

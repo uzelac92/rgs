@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"rgs/observability"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type WalletClient struct {
@@ -77,12 +79,13 @@ func (w *WalletClient) call(ctx context.Context, path string, playerID int32, am
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println("failed to close response body")
+			observability.Logger.Error("failed to close wallet call", zap.Error(err))
 		}
 	}(resp.Body)
 
 	var res walletResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		observability.Logger.Error("failed to decode wallet response", zap.Error(err))
 		return false, err
 	}
 

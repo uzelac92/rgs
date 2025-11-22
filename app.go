@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"rgs/handlers"
 	"rgs/middleware"
+	"rgs/observability"
 	"rgs/services"
 	"rgs/sqlc"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
@@ -49,6 +51,8 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 	rateLimiter := middleware.NewRateLimiter(20, 10)
 	r.Use(opMiddleware.Handle)
 	r.Use(rateLimiter.Limit)
+	r.Use(observability.MetricsMiddleware)
+	r.Use(middleware.OTelMiddleware)
 
 	// Sessions
 	r.Post("/sessions/launch", sessionsHandler.LaunchSession)
@@ -73,6 +77,9 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 
 	// Audit
 	r.Get("/audit", auditHandler.List)
+
+	// Metrics
+	r.Handle("/metrics", promhttp.Handler())
 
 	return r
 }

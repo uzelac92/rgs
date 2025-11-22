@@ -29,7 +29,6 @@ func NewOperatorMiddleware(q *sqlc.Queries) *OperatorMiddleware {
 
 func (m *OperatorMiddleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		apiKey := r.Header.Get("X-Operator-Key")
 		if apiKey == "" {
 			http.Error(w, "missing X-Operator-Key", http.StatusUnauthorized)

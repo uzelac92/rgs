@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
 	"os"
+	"rgs/observability"
 )
 
 type Config struct {
@@ -20,7 +20,7 @@ func LoadConfig() Config {
 	walletUrl := os.Getenv("WALLET_URL")
 	walletSecret := os.Getenv("WALLET_SECRET")
 	if walletUrl == "" || walletSecret == "" {
-		log.Println("WALLET_URL and WALLET_SECRET must be set")
+		observability.Logger.Error("WALLET_URL and WALLET_SECRET must be set")
 	}
 
 	return Config{

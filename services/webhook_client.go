@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"rgs/observability"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type WebhookClient struct {
@@ -61,7 +63,7 @@ func (wc *WebhookClient) Send(ctx context.Context, webhookURL string, payload in
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println("failed to close webhook sent response body")
+			observability.Logger.Error("failed to close webhook sent response body", zap.Error(err))
 		}
 	}(resp.Body)
 

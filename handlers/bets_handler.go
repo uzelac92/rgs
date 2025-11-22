@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"rgs/middleware"
+	"rgs/observability"
 	"rgs/services"
+
+	"go.uber.org/zap"
 )
 
 type BetsHandler struct {
@@ -27,6 +29,7 @@ func (h *BetsHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 	var req placeBetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		observability.Logger.Error("error decoding betting request", zap.Error(err))
 		return
 	}
 
@@ -36,6 +39,7 @@ func (h *BetsHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	observability.BetsPlaced.Inc()
 	round, bet, err := h.agg.PlaceBet(r.Context(), services.PlaceBetParams{
 		OperatorID:     operator.ID,
 		PlayerID:       req.PlayerID,
@@ -44,8 +48,14 @@ func (h *BetsHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		observability.Logger.Error("error placing the bet", zap.Error(err))
 		return
 	}
+
+	observability.Logger.Info("bet placed",
+		zap.Int32("operator_id", operator.ID),
+		zap.Float64("amount", req.Amount),
+	)
 
 	resp := struct {
 		BetID   int32 `json:"bet_id"`
@@ -57,7 +67,7 @@ func (h *BetsHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
-		log.Println("error encoding placeBet", err)
+		observability.Logger.Error("error encoding placeBet", zap.Error(err))
 		return
 	}
 }

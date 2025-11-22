@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"rgs/observability"
 	"rgs/sqlc"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type OutboxWorker struct {
@@ -34,7 +35,7 @@ func (w *OutboxWorker) processPending() {
 
 	events, err := w.queries.GetPendingOutbox(ctx)
 	if err != nil {
-		log.Println("failed to fetch outbox:", err)
+		observability.Logger.Error("failed to fetch outbox", zap.Error(err))
 		return
 	}
 
@@ -58,7 +59,7 @@ func (w *OutboxWorker) processPending() {
 
 		ok, errCredit := w.wallet.Credit(ctx, e.PlayerID, e.Amount, creditKey)
 		if errCredit != nil || !ok {
-			log.Println("retry credit failed:", errCredit)
+			observability.Logger.Error("retry credit failed", zap.Error(err))
 
 			errorMsg := "wallet declined"
 			if errCredit != nil {
@@ -86,7 +87,7 @@ func (w *OutboxWorker) processPending() {
 
 		err = w.queries.MarkBetAsWon(ctx, e.BetID)
 		if err != nil {
-			log.Println("failed to mark bet as won:", err)
+			observability.Logger.Error("failed to mark bet as won", zap.Error(err))
 			continue
 		}
 		if w.bus != nil {
@@ -118,7 +119,7 @@ func (w *OutboxWorker) processPending() {
 
 		_, err = w.queries.MarkOutboxProcessed(ctx, e.ID)
 		if err != nil {
-			log.Println("failed to mark outbox processed:", err)
+			observability.Logger.Error("failed to mark outbox processed", zap.Error(err))
 		}
 	}
 }

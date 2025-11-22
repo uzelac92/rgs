@@ -2,19 +2,20 @@ package main
 
 import (
 	"database/sql"
-	"log"
+	"rgs/observability"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.uber.org/zap"
 )
 
 func ConnectDB(cfg Config) *sql.DB {
 	db, err := sql.Open("pgx", cfg.DbUrl)
 	if err != nil {
-		log.Fatalf("failed to open db: %v", err)
+		observability.Logger.Fatal("failed to open db", zap.Error(err))
 	}
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("failed to ping db: %v", err)
+		observability.Logger.Fatal("failed to ping db", zap.Error(err))
 	}
 
 	return db

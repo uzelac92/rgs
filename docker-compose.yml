@@ -40,6 +40,7 @@ services:
       - postgres
       - walletmock
       - migrate
+      - otel-collector        # 👈 add dependency
     environment:
       DATABASE_URL: postgres://rgs:rgs@postgres:5432/rgs?sslmode=disable
       WALLET_URL: http://walletmock:9000
@@ -55,6 +56,25 @@ services:
       - "9090:8080"
     depends_on:
       - postgres
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    command: ["--config=/conf/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/conf/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.47
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

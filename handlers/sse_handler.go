@@ -3,11 +3,13 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"rgs/middleware"
+	"rgs/observability"
 	"rgs/services"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type SSEHandler struct {
@@ -66,7 +68,7 @@ func (h *SSEHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		case <-ticker.C:
 			_, err := fmt.Fprintf(w, ": ping\n\n")
 			if err != nil {
-				log.Println("failed to write event ping:", err)
+				observability.Logger.Error("failed to write event ping", zap.Error(err))
 				return
 			}
 			flusher.Flush()
@@ -79,17 +81,17 @@ func (h *SSEHandler) writeEvent(w http.ResponseWriter, evt services.SSEEvent) {
 
 	_, err := fmt.Fprintf(w, "id: %s\n", evt.ID)
 	if err != nil {
-		log.Println("error writing event ID:", err)
+		observability.Logger.Error("error writing event ID", zap.Error(err))
 		return
 	}
 	_, err = fmt.Fprintf(w, "event: %s\n", evt.EventType)
 	if err != nil {
-		log.Println("error writing event type:", err)
+		observability.Logger.Error("error writing event type", zap.Error(err))
 		return
 	}
 	_, err = fmt.Fprintf(w, "data: %s\n\n", data)
 	if err != nil {
-		log.Println("error writing event data:", err)
+		observability.Logger.Error("error writing event data", zap.Error(err))
 		return
 	}
 }

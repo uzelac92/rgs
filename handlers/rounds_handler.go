@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+	"rgs/observability"
 	"strconv"
 
 	"rgs/sqlc"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 type RoundsHandler struct {
@@ -35,12 +36,13 @@ func (h *RoundsHandler) GetRound(w http.ResponseWriter, r *http.Request) {
 	round, err := h.queries.GetRound(r.Context(), int32(id))
 	if err != nil {
 		http.Error(w, "round not found", http.StatusNotFound)
+		observability.Logger.Error("round not found", zap.Error(err))
 		return
 	}
 
 	err = json.NewEncoder(w).Encode(round)
 	if err != nil {
-		log.Println("error encoding round", err)
+		observability.Logger.Error("error encoding round", zap.Error(err))
 		return
 	}
 }

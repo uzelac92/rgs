@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 	"database/sql"
-	"log"
+	"rgs/observability"
 	"rgs/sqlc"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type WebhookWorker struct {
@@ -36,14 +37,14 @@ func (w *WebhookWorker) processPending() {
 
 	events, err := w.queries.GetPendingWebhookEvents(ctx)
 	if err != nil {
-		log.Println("failed to fetch pending webhook events:", err)
+		observability.Logger.Error("failed to fetch pending webhook events:", zap.Error(err))
 		return
 	}
 
 	for _, ev := range events {
 		event, err := w.queries.MarkWebhookProcessing(ctx, ev.ID)
 		if err != nil {
-			log.Println("failed to lock webhook event:", err)
+			observability.Logger.Error("failed to lock webhook event:", zap.Error(err))
 			continue
 		}
 

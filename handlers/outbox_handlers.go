@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"rgs/middleware"
+	"rgs/observability"
 	"rgs/services"
+
+	"go.uber.org/zap"
 )
 
 type OutboxHandler struct {
@@ -32,12 +34,13 @@ func (h *OutboxHandler) ListOutbox(w http.ResponseWriter, r *http.Request) {
 	events, err := h.svc.ListOutbox(r.Context(), operator.ID, status)
 	if err != nil {
 		http.Error(w, "failed to load outbox events", http.StatusInternalServerError)
+		observability.Logger.Error("failed to load outbox events", zap.Error(err))
 		return
 	}
 
 	err = json.NewEncoder(w).Encode(events)
 	if err != nil {
-		log.Println("failed to encode outbox events")
+		observability.Logger.Error("failed to encode outbox events", zap.Error(err))
 		return
 	}
 }

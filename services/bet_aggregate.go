@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"rgs/game"
+	"rgs/observability"
 	"rgs/sqlc"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type BetAggregate struct {
@@ -73,6 +75,9 @@ func (b *BetAggregate) withTx(ctx context.Context, fn func(*sqlc.Queries) error)
 func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Round, sqlc.Bet, error) {
 	var round sqlc.Round
 	var bet sqlc.Bet
+
+	timer := prometheus.NewTimer(observability.BetSettlementDuration)
+	defer timer.ObserveDuration()
 
 	err := b.withTx(ctx, func(q *sqlc.Queries) error {
 		existing, err := q.GetBetByIdempotency(ctx, sqlc.GetBetByIdempotencyParams{
@@ -150,8 +155,10 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 			return err
 		}
 
+		observability.WalletDebitCalls.Inc()
 		ok, err := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
 		if err != nil || !ok {
+			observability.WalletDebitFailures.Inc()
 			return errors.New("wallet debit failed")
 		}
 

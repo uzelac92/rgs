@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+	"rgs/observability"
+
+	"go.uber.org/zap"
 )
 
 type Handlers struct {
@@ -18,7 +20,7 @@ func (h *Handlers) Debit(w http.ResponseWriter, r *http.Request) {
 	var req WalletRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		log.Println("Error decoding request:", err)
+		observability.Logger.Error("error decoding request", zap.Error(err))
 		return
 	}
 
@@ -33,7 +35,7 @@ func (h *Handlers) Debit(w http.ResponseWriter, r *http.Request) {
 			Balance: h.store.GetBalance(req.PlayerID),
 		})
 		if err != nil {
-			log.Println("Error encoding idempotent response:", err)
+			observability.Logger.Error("error encoding wallet response", zap.Error(err))
 		}
 		return
 	}
@@ -45,7 +47,7 @@ func (h *Handlers) Debit(w http.ResponseWriter, r *http.Request) {
 		Balance: newBalance,
 	})
 	if err != nil {
-		log.Println("Error encoding response:", err)
+		observability.Logger.Error("error encoding wallet response", zap.Error(err))
 		return
 	}
 }
@@ -54,7 +56,7 @@ func (h *Handlers) Credit(w http.ResponseWriter, r *http.Request) {
 	var req WalletRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		log.Println("Error decoding request:", err)
+		observability.Logger.Error("error decoding request", zap.Error(err))
 		return
 	}
 
@@ -69,7 +71,7 @@ func (h *Handlers) Credit(w http.ResponseWriter, r *http.Request) {
 			Balance: h.store.GetBalance(req.PlayerID),
 		})
 		if err != nil {
-			log.Println("Error encoding idempotent response:", err)
+			observability.Logger.Error("error encoding wallet response", zap.Error(err))
 		}
 		return
 	}
@@ -81,7 +83,7 @@ func (h *Handlers) Credit(w http.ResponseWriter, r *http.Request) {
 		Balance: newBalance,
 	})
 	if err != nil {
-		log.Println("Error encoding response:", err)
+		observability.Logger.Error("error encoding wallet response", zap.Error(err))
 		return
 	}
 }

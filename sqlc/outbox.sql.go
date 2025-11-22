@@ -7,7 +7,6 @@ package sqlc
 
 import (
 	"context"
-	"database/sql"
 )
 
 const getPendingOutbox = `-- name: GetPendingOutbox :many
@@ -131,8 +130,8 @@ ORDER BY id DESC
 `
 
 type ListOutboxByOperatorStatusParams struct {
-	OperatorID int32        `json:"operator_id"`
-	Processed  sql.NullBool `json:"processed"`
+	OperatorID int32 `json:"operator_id"`
+	Processed  bool  `json:"processed"`
 }
 
 func (q *Queries) ListOutboxByOperatorStatus(ctx context.Context, arg ListOutboxByOperatorStatusParams) ([]Outbox, error) {

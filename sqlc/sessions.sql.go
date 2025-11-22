@@ -159,6 +159,26 @@ func (q *Queries) GetPlayer(ctx context.Context, arg GetPlayerParams) (Player, e
 	return i, err
 }
 
+const getPlayerByID = `-- name: GetPlayerByID :one
+SELECT id, operator_id, external_player_id, jurisdiction, created_at
+FROM players
+WHERE id = $1
+    LIMIT 1
+`
+
+func (q *Queries) GetPlayerByID(ctx context.Context, id int32) (Player, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerByID, id)
+	var i Player
+	err := row.Scan(
+		&i.ID,
+		&i.OperatorID,
+		&i.ExternalPlayerID,
+		&i.Jurisdiction,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT id, operator_id, player_id, launch_token, expires_at, revoked, created_at FROM sessions
 WHERE id = $1

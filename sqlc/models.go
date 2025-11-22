@@ -12,6 +12,15 @@ import (
 	"github.com/google/uuid"
 )
 
+type AuditLog struct {
+	ID         int32           `json:"id"`
+	OperatorID int32           `json:"operator_id"`
+	PlayerID   sql.NullInt32   `json:"player_id"`
+	Action     string          `json:"action"`
+	Details    json.RawMessage `json:"details"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
 type Bet struct {
 	ID             int32     `json:"id"`
 	OperatorID     int32     `json:"operator_id"`
@@ -34,14 +43,22 @@ type Operator struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type OperatorLimit struct {
+	OperatorID           int32    `json:"operator_id"`
+	MaxBet               float64  `json:"max_bet"`
+	AllowedJurisdictions []string `json:"allowed_jurisdictions"`
+	DailyLossLimit       float64  `json:"daily_loss_limit"`
+	DailyWinLimit        float64  `json:"daily_win_limit"`
+}
+
 type Outbox struct {
-	ID         int32        `json:"id"`
-	BetID      int32        `json:"bet_id"`
-	OperatorID int32        `json:"operator_id"`
-	PlayerID   int32        `json:"player_id"`
-	Amount     float64      `json:"amount"`
-	CreatedAt  sql.NullTime `json:"created_at"`
-	Processed  sql.NullBool `json:"processed"`
+	ID         int32     `json:"id"`
+	BetID      int32     `json:"bet_id"`
+	OperatorID int32     `json:"operator_id"`
+	PlayerID   int32     `json:"player_id"`
+	Amount     float64   `json:"amount"`
+	CreatedAt  time.Time `json:"created_at"`
+	Processed  bool      `json:"processed"`
 }
 
 type Player struct {

@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"rgs/sqlc"
 )
 
@@ -23,14 +22,14 @@ func (s *OutboxService) ListOutbox(
 		return s.queries.ListOutboxByOperator(ctx, operatorID)
 	}
 
-	var processed sql.NullBool
+	var processedBool bool
 
 	switch *status {
 	case "processed", "completed":
-		processed = sql.NullBool{Bool: true, Valid: true}
+		processedBool = true
 
 	case "pending", "retrying":
-		processed = sql.NullBool{Bool: false, Valid: true}
+		processedBool = false
 
 	default:
 		return s.queries.ListOutboxByOperator(ctx, operatorID)
@@ -40,7 +39,7 @@ func (s *OutboxService) ListOutbox(
 		ctx,
 		sqlc.ListOutboxByOperatorStatusParams{
 			OperatorID: operatorID,
-			Processed:  processed,
+			Processed:  processedBool,
 		},
 	)
 }

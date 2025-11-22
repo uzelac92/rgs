@@ -12,12 +12,17 @@ import (
 )
 
 type SessionsService struct {
-	queries *sqlc.Queries
-	bus     *EventBus
+	queries    *sqlc.Queries
+	bus        *EventBus
+	compliance *ComplianceService
 }
 
-func NewSessionsService(q *sqlc.Queries, bus *EventBus) *SessionsService {
-	return &SessionsService{queries: q, bus: bus}
+func NewSessionsService(
+	q *sqlc.Queries,
+	bus *EventBus,
+	comp *ComplianceService,
+) *SessionsService {
+	return &SessionsService{queries: q, bus: bus, compliance: comp}
 }
 
 type LaunchSessionParams struct {
@@ -59,6 +64,10 @@ func (s *SessionsService) getOrCreatePlayer(
 }
 
 func (s *SessionsService) LaunchSession(ctx context.Context, p LaunchSessionParams) (sqlc.Session, error) {
+	if err := s.compliance.CheckJurisdiction(ctx, p.OperatorID, p.Jurisdiction); err != nil {
+		return sqlc.Session{}, err
+	}
+
 	id := uuid.New()
 
 	player, err := s.getOrCreatePlayer(ctx, p.OperatorID, p.ExternalPlayerID, p.Jurisdiction)
@@ -81,6 +90,12 @@ func (s *SessionsService) LaunchSession(ctx context.Context, p LaunchSessionPara
 	if err != nil {
 		return sqlc.Session{}, err
 	}
+
+	s.compliance.Log(ctx, p.OperatorID, &player.ID, "session.launch", map[string]any{
+		"external_player_id": p.ExternalPlayerID,
+		"jurisdiction":       p.Jurisdiction,
+		"session_id":         session.ID.String(),
+	})
 
 	s.bus.Publish(SSEEvent{
 		ID:         uuid.NewString(),

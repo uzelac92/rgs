@@ -26,9 +26,11 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 	webhookWorker := services.NewWebhookWorker(queries, eventBus)
 	webhookWorker.Start()
 
+	complianceSvc := services.NewComplianceService(queries)
+
 	// Services (business logic)
-	sessionsSvc := services.NewSessionsService(queries, eventBus)
-	betAgg := services.NewBetAggregate(queries, walletClient, eventBus, db)
+	sessionsSvc := services.NewSessionsService(queries, eventBus, complianceSvc)
+	betAgg := services.NewBetAggregate(queries, walletClient, eventBus, db, complianceSvc)
 	webhookSvc := services.NewWebhookService(queries)
 	outboxSvc := services.NewOutboxService(queries)
 
@@ -39,11 +41,14 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 	betsHandler := handlers.NewBetsHandler(betAgg)
 	roundsHandler := handlers.NewRoundsHandler(queries)
 	sseHandler := handlers.NewSSEHandler(eventBus)
+	auditHandler := handlers.NewAuditHandler(complianceSvc)
 
 	// Router
 	r := chi.NewRouter()
 	opMiddleware := middleware.NewOperatorMiddleware(queries)
+	rateLimiter := middleware.NewRateLimiter(20, 10)
 	r.Use(opMiddleware.Handle)
+	r.Use(rateLimiter.Limit)
 
 	// Sessions
 	r.Post("/sessions/launch", sessionsHandler.LaunchSession)
@@ -65,6 +70,9 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 
 	// Stream
 	r.Get("/stream", sseHandler.Stream)
+
+	// Audit
+	r.Get("/audit", auditHandler.List)
 
 	return r
 }

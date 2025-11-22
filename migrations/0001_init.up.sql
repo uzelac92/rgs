@@ -1,14 +1,12 @@
--- Operators table
 CREATE TABLE operators (
-   id SERIAL PRIMARY KEY,
-   name TEXT NOT NULL,
-   api_key TEXT UNIQUE NOT NULL,
-   webhook_url TEXT NOT NULL,
-   webhook_secret TEXT NOT NULL,
-   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    api_key TEXT UNIQUE NOT NULL,
+    webhook_url TEXT NOT NULL,
+    webhook_secret TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Players table
 CREATE TABLE players (
     id SERIAL PRIMARY KEY,
     operator_id INT NOT NULL REFERENCES operators(id),
@@ -18,7 +16,6 @@ CREATE TABLE players (
     UNIQUE(operator_id, external_player_id)
 );
 
--- Sessions table
 CREATE TABLE sessions (
     id UUID PRIMARY KEY,
     operator_id INT NOT NULL REFERENCES operators(id),
@@ -29,7 +26,6 @@ CREATE TABLE sessions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Rounds table
 CREATE TABLE rounds (
     id SERIAL PRIMARY KEY,
     operator_id INT NOT NULL REFERENCES operators(id),
@@ -40,7 +36,6 @@ CREATE TABLE rounds (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Bets table
 CREATE TABLE bets (
     id SERIAL PRIMARY KEY,
     operator_id INT NOT NULL REFERENCES operators(id),
@@ -57,12 +52,12 @@ CREATE TABLE bets (
 
 CREATE TABLE outbox (
     id SERIAL PRIMARY KEY,
-    bet_id INT NOT NULL,
-    operator_id INT NOT NULL,
-    player_id INT NOT NULL,
+    bet_id INT NOT NULL REFERENCES bets(id),
+    operator_id INT NOT NULL REFERENCES operators(id),
+    player_id INT NOT NULL REFERENCES players(id),
     amount NUMERIC(18,2) NOT NULL,
-    created_at TIMESTAMP DEFAULT now(),
-    processed BOOLEAN DEFAULT FALSE
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE webhook_events (
@@ -72,8 +67,25 @@ CREATE TABLE webhook_events (
     payload JSONB NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     retries INT NOT NULL DEFAULT 0,
-    next_retry_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    next_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     error_message TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE audit_logs (
+    id SERIAL PRIMARY KEY,
+    operator_id INT NOT NULL REFERENCES operators(id),
+    player_id INT REFERENCES players(id),
+    action TEXT NOT NULL,
+    details JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE operator_limits (
+    operator_id INT PRIMARY KEY REFERENCES operators(id),
+    max_bet NUMERIC(18,2) NOT NULL DEFAULT 1000,
+    allowed_jurisdictions TEXT[],
+    daily_loss_limit NUMERIC(18,2) NOT NULL,
+    daily_win_limit NUMERIC(18,2) NOT NULL
 );

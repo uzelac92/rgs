@@ -15,23 +15,26 @@ import (
 )
 
 type BetAggregate struct {
-	queries *sqlc.Queries
-	db      *sql.DB
-	wallet  *WalletClient
-	bus     *EventBus
+	queries    *sqlc.Queries
+	db         *sql.DB
+	wallet     *WalletClient
+	bus        *EventBus
+	compliance *ComplianceService
 }
 
 func NewBetAggregate(
 	q *sqlc.Queries,
-	w *WalletClient,
+	wallet *WalletClient,
 	bus *EventBus,
 	db *sql.DB,
+	compliance *ComplianceService,
 ) *BetAggregate {
 	return &BetAggregate{
-		queries: q,
-		wallet:  w,
-		bus:     bus,
-		db:      db,
+		queries:    q,
+		db:         db,
+		wallet:     wallet,
+		bus:        bus,
+		compliance: compliance,
 	}
 }
 
@@ -49,17 +52,6 @@ func generateRandomSeed() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
-}
-
-func (b *BetAggregate) settleWin(ctx context.Context, p PlaceBetParams, winAmount float64) (string, error) {
-	creditKey := p.IdempotencyKey + "-win"
-
-	ok, err := b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
-	if err != nil || !ok {
-		return "pending_settlement", nil
-	}
-
-	return "won", nil
 }
 
 func (b *BetAggregate) withTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
@@ -93,11 +85,23 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 			return nil
 		}
 
+		player, err := b.queries.GetPlayerByID(ctx, p.PlayerID)
+		if err != nil {
+			return errors.New("player not found")
+		}
+
+		jurisdiction := player.Jurisdiction
+
+		if b.compliance != nil {
+			if err := b.compliance.Check(ctx, p.OperatorID, p.PlayerID, jurisdiction, p.Amount); err != nil {
+				return err
+			}
+		}
+
 		serverSeed, err := generateRandomSeed()
 		if err != nil {
 			return err
 		}
-
 		clientSeed, err := generateRandomSeed()
 		if err != nil {
 			return err
@@ -124,9 +128,9 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 				Data: map[string]any{
 					"round_id":    round.ID,
 					"player_id":   p.PlayerID,
-					"outcome":     pf.Outcome,
 					"server_seed": serverSeed,
 					"client_seed": clientSeed,
+					"outcome":     pf.Outcome,
 				},
 				CreatedAt: time.Now(),
 			})
@@ -144,16 +148,6 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 		})
 		if err != nil {
 			return err
-		}
-
-		if b.bus != nil {
-			b.bus.Publish(SSEEvent{
-				ID:         uuid.NewString(),
-				OperatorID: p.OperatorID,
-				EventType:  "bet.processing",
-				Data:       bet,
-				CreatedAt:  time.Now(),
-			})
 		}
 
 		ok, err := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
@@ -189,6 +183,7 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 			if err != nil || !ok {
 				status = "pending_settlement"
 
+				// Outbox fallback for async settlement
 				_, _ = q.InsertOutbox(ctx, sqlc.InsertOutboxParams{
 					BetID:      bet.ID,
 					OperatorID: p.OperatorID,
@@ -208,23 +203,23 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 		}
 
 		if b.bus != nil {
-			settlementEv := "settlement.lost"
+			eventType := "settlement.lost"
 			if status == "won" {
-				settlementEv = "settlement.won"
+				eventType = "settlement.won"
 			} else if status == "pending_settlement" {
-				settlementEv = "settlement.pending"
+				eventType = "settlement.pending"
 			}
 
 			b.bus.Publish(SSEEvent{
 				ID:         uuid.NewString(),
 				OperatorID: p.OperatorID,
-				EventType:  settlementEv,
+				EventType:  eventType,
 				Data: map[string]any{
 					"bet_id":    bet.ID,
 					"round_id":  round.ID,
 					"player_id": p.PlayerID,
-					"status":    status,
 					"amount":    winAmount,
+					"status":    status,
 				},
 				CreatedAt: time.Now(),
 			})

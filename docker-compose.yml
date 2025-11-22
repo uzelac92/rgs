@@ -13,5 +13,48 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  migrate:
+    image: migrate/migrate
+    depends_on:
+      - postgres
+    volumes:
+      - ./migrations:/migrations
+    command: [
+      "-path=/migrations",
+      "-database=postgres://rgs:rgs@postgres:5432/rgs?sslmode=disable",
+      "up"
+    ]
+    restart: "on-failure"   # Run once, retry if DB isn’t ready
+
+  walletmock:
+    build:
+      context: .
+      dockerfile: walletmock/Dockerfile
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+
+  rgs:
+    build: .
+    depends_on:
+      - postgres
+      - walletmock
+      - migrate
+    environment:
+      DATABASE_URL: postgres://rgs:rgs@postgres:5432/rgs?sslmode=disable
+      WALLET_URL: http://walletmock:9000
+      WALLET_SECRET: testsecret123
+      WEBHOOK_SECRET: webhooksecret123
+    ports:
+      - "8080:8080"
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "9090:8080"
+    depends_on:
+      - postgres
+
 volumes:
   postgres_data:

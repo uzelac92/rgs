@@ -21,6 +21,12 @@ SELECT * FROM players
 WHERE operator_id = $1 AND external_player_id = $2
     LIMIT 1;
 
+-- name: GetPlayerByID :one
+SELECT *
+FROM players
+WHERE id = $1
+    LIMIT 1;
+
 -- name: CreateSession :one
 INSERT INTO sessions (id, operator_id, player_id, launch_token, expires_at)
 VALUES ($1, $2, $3, $4, $5)

@@ -24,6 +24,6 @@ func (s *Server) Run() {
 	http.HandleFunc("/wallet/debit", s.handlers.Debit)
 	http.HandleFunc("/wallet/credit", s.handlers.Credit)
 
-	log.Println("Wallet mock running on :8081")
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	log.Println("Wallet mock running on :9000")
+	log.Fatal(http.ListenAndServe(":9000", nil))
 }

@@ -8,12 +8,12 @@ import (
 	"rgs/services"
 )
 
-type BetsWriteHandler struct {
+type BetsHandler struct {
 	agg *services.BetAggregate
 }
 
-func NewBetsWriteHandler(agg *services.BetAggregate) *BetsWriteHandler {
-	return &BetsWriteHandler{agg: agg}
+func NewBetsHandler(agg *services.BetAggregate) *BetsHandler {
+	return &BetsHandler{agg: agg}
 }
 
 type placeBetRequest struct {
@@ -23,7 +23,7 @@ type placeBetRequest struct {
 	IdempotencyKey string  `json:"idempotency_key"`
 }
 
-func (h *BetsWriteHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
+func (h *BetsHandler) PlaceBet(w http.ResponseWriter, r *http.Request) {
 	var req placeBetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)

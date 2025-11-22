@@ -7,20 +7,31 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"rgs/game"
 	"rgs/sqlc"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type BetAggregate struct {
 	queries *sqlc.Queries
+	db      *sql.DB
 	wallet  *WalletClient
+	bus     *EventBus
 }
 
-func NewBetAggregate(q *sqlc.Queries, w *WalletClient) *BetAggregate {
+func NewBetAggregate(
+	q *sqlc.Queries,
+	w *WalletClient,
+	bus *EventBus,
+	db *sql.DB,
+) *BetAggregate {
 	return &BetAggregate{
 		queries: q,
 		wallet:  w,
+		bus:     bus,
+		db:      db,
 	}
 }
 
@@ -51,108 +62,187 @@ func (b *BetAggregate) settleWin(ctx context.Context, p PlaceBetParams, winAmoun
 	return "won", nil
 }
 
+func (b *BetAggregate) withTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
+	tx, err := b.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	qtx := b.queries.WithTx(tx)
+
+	if err := fn(qtx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Round, sqlc.Bet, error) {
-	existing, err := b.queries.GetBetByIdempotency(ctx, sqlc.GetBetByIdempotencyParams{
-		OperatorID:     p.OperatorID,
-		IdempotencyKey: p.IdempotencyKey,
-	})
-	if err == nil {
-		round, _ := b.queries.GetRound(ctx, existing.RoundID)
-		return round, existing, nil
-	}
+	var round sqlc.Round
+	var bet sqlc.Bet
 
-	ok, err := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
-	if err != nil {
-		return sqlc.Round{}, sqlc.Bet{}, fmt.Errorf("wallet debit failed: %w", err)
-	}
-	if !ok {
-		return sqlc.Round{}, sqlc.Bet{}, errors.New("insufficient funds")
-	}
-
-	serverSeed, err := generateRandomSeed()
-	if err != nil {
-		return sqlc.Round{}, sqlc.Bet{}, err
-	}
-
-	clientSeed, err := generateRandomSeed()
-	if err != nil {
-		return sqlc.Round{}, sqlc.Bet{}, err
-	}
-
-	pf := game.GenerateOutcome(serverSeed, clientSeed)
-
-	round, err := b.queries.CreateRound(ctx, sqlc.CreateRoundParams{
-		OperatorID: p.OperatorID,
-		PlayerID:   p.PlayerID,
-		ServerSeed: serverSeed,
-		ClientSeed: clientSeed,
-		Outcome:    pf.Outcome,
-	})
-	if err != nil {
-		return sqlc.Round{}, sqlc.Bet{}, err
-	}
-
-	winAmount := 0.0
-	status := "lost"
-	if pf.Outcome == 6 {
-		winAmount = p.Amount * 5
-	}
-
-	if winAmount > 0 {
-		status, _ = b.settleWin(ctx, p, winAmount)
-	}
-
-	bet, err := b.queries.CreateBet(ctx, sqlc.CreateBetParams{
-		OperatorID:     p.OperatorID,
-		PlayerID:       p.PlayerID,
-		RoundID:        round.ID,
-		Amount:         p.Amount,
-		Outcome:        pf.Outcome,
-		WinAmount:      winAmount,
-		Status:         status,
-		IdempotencyKey: p.IdempotencyKey,
-	})
-	if err != nil {
-		return sqlc.Round{}, sqlc.Bet{}, err
-	}
-
-	switch status {
-
-	case "won":
-		b.emitWebhookEvent(ctx, p.OperatorID, "settlement_success", map[string]interface{}{
-			"bet_id":    bet.ID,
-			"round_id":  round.ID,
-			"amount":    winAmount,
-			"status":    "won",
-			"player_id": p.PlayerID,
+	err := b.withTx(ctx, func(q *sqlc.Queries) error {
+		existing, err := q.GetBetByIdempotency(ctx, sqlc.GetBetByIdempotencyParams{
+			OperatorID:     p.OperatorID,
+			IdempotencyKey: p.IdempotencyKey,
 		})
+		if err == nil {
+			round, _ = q.GetRound(ctx, existing.RoundID)
+			bet = existing
+			return nil
+		}
 
-	case "pending_settlement":
-		b.emitWebhookEvent(ctx, p.OperatorID, "settlement_pending", map[string]interface{}{
-			"bet_id":    bet.ID,
-			"round_id":  round.ID,
-			"amount":    winAmount,
-			"status":    "pending",
-			"player_id": p.PlayerID,
-		})
+		serverSeed, err := generateRandomSeed()
+		if err != nil {
+			return err
+		}
 
-	case "lost":
-		b.emitWebhookEvent(ctx, p.OperatorID, "settlement_lost", map[string]interface{}{
-			"bet_id":    bet.ID,
-			"round_id":  round.ID,
-			"amount":    0,
-			"status":    "lost",
-			"player_id": p.PlayerID,
-		})
-	}
+		clientSeed, err := generateRandomSeed()
+		if err != nil {
+			return err
+		}
 
-	if status == "pending_settlement" {
-		_, _ = b.queries.InsertOutbox(ctx, sqlc.InsertOutboxParams{
-			BetID:      bet.ID,
+		pf := game.GenerateOutcome(serverSeed, clientSeed)
+
+		round, err = q.CreateRound(ctx, sqlc.CreateRoundParams{
 			OperatorID: p.OperatorID,
 			PlayerID:   p.PlayerID,
-			Amount:     winAmount,
+			ServerSeed: serverSeed,
+			ClientSeed: clientSeed,
+			Outcome:    pf.Outcome,
 		})
+		if err != nil {
+			return err
+		}
+
+		if b.bus != nil {
+			b.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: p.OperatorID,
+				EventType:  "round.finished",
+				Data: map[string]any{
+					"round_id":    round.ID,
+					"player_id":   p.PlayerID,
+					"outcome":     pf.Outcome,
+					"server_seed": serverSeed,
+					"client_seed": clientSeed,
+				},
+				CreatedAt: time.Now(),
+			})
+		}
+
+		bet, err = q.CreateBet(ctx, sqlc.CreateBetParams{
+			OperatorID:     p.OperatorID,
+			PlayerID:       p.PlayerID,
+			RoundID:        round.ID,
+			Amount:         p.Amount,
+			Outcome:        pf.Outcome,
+			WinAmount:      0,
+			Status:         "processing",
+			IdempotencyKey: p.IdempotencyKey,
+		})
+		if err != nil {
+			return err
+		}
+
+		if b.bus != nil {
+			b.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: p.OperatorID,
+				EventType:  "bet.processing",
+				Data:       bet,
+				CreatedAt:  time.Now(),
+			})
+		}
+
+		ok, err := b.wallet.Debit(ctx, p.PlayerID, p.Amount, p.IdempotencyKey)
+		if err != nil || !ok {
+			return errors.New("wallet debit failed")
+		}
+
+		if b.bus != nil {
+			b.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: p.OperatorID,
+				EventType:  "wallet.debit",
+				Data: map[string]any{
+					"player_id": p.PlayerID,
+					"amount":    p.Amount,
+				},
+				CreatedAt: time.Now(),
+			})
+		}
+
+		winAmount := 0.0
+		status := "lost"
+
+		if pf.Outcome == 6 {
+			winAmount = p.Amount * 5
+			status = "won"
+		}
+
+		if status == "won" {
+			creditKey := p.IdempotencyKey + "-win"
+
+			ok, err := b.wallet.Credit(ctx, p.PlayerID, winAmount, creditKey)
+			if err != nil || !ok {
+				status = "pending_settlement"
+
+				_, _ = q.InsertOutbox(ctx, sqlc.InsertOutboxParams{
+					BetID:      bet.ID,
+					OperatorID: p.OperatorID,
+					PlayerID:   p.PlayerID,
+					Amount:     winAmount,
+				})
+			}
+		}
+
+		bet, err = q.UpdateBetStatus(ctx, sqlc.UpdateBetStatusParams{
+			ID:        bet.ID,
+			Status:    status,
+			WinAmount: winAmount,
+		})
+		if err != nil {
+			return err
+		}
+
+		if b.bus != nil {
+			settlementEv := "settlement.lost"
+			if status == "won" {
+				settlementEv = "settlement.won"
+			} else if status == "pending_settlement" {
+				settlementEv = "settlement.pending"
+			}
+
+			b.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: p.OperatorID,
+				EventType:  settlementEv,
+				Data: map[string]any{
+					"bet_id":    bet.ID,
+					"round_id":  round.ID,
+					"player_id": p.PlayerID,
+					"status":    status,
+					"amount":    winAmount,
+				},
+				CreatedAt: time.Now(),
+			})
+		}
+
+		b.emitWebhookEvent(ctx, p.OperatorID, "bet_settled", map[string]any{
+			"bet_id":    bet.ID,
+			"round_id":  round.ID,
+			"player_id": p.PlayerID,
+			"amount":    winAmount,
+			"status":    status,
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		return sqlc.Round{}, sqlc.Bet{}, err
 	}
 
 	return round, bet, nil
@@ -165,7 +255,7 @@ func (b *BetAggregate) emitWebhookEvent(ctx context.Context, operatorID int32, e
 	}
 
 	_, _ = b.queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{
-		OperatorID: sql.NullInt32{Int32: operatorID, Valid: true},
+		OperatorID: operatorID,
 		EventType:  eventType,
 		Payload:    raw,
 	})

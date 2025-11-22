@@ -13,10 +13,11 @@ import (
 
 type SessionsService struct {
 	queries *sqlc.Queries
+	bus     *EventBus
 }
 
-func NewSessionsService(q *sqlc.Queries) *SessionsService {
-	return &SessionsService{queries: q}
+func NewSessionsService(q *sqlc.Queries, bus *EventBus) *SessionsService {
+	return &SessionsService{queries: q, bus: bus}
 }
 
 type LaunchSessionParams struct {
@@ -70,22 +71,67 @@ func (s *SessionsService) LaunchSession(ctx context.Context, p LaunchSessionPara
 		return sqlc.Session{}, err
 	}
 
-	return s.queries.CreateSession(ctx, sqlc.CreateSessionParams{
+	session, err := s.queries.CreateSession(ctx, sqlc.CreateSessionParams{
 		ID:          id,
 		OperatorID:  p.OperatorID,
 		PlayerID:    player.ID,
 		LaunchToken: launchToken,
 		ExpiresAt:   time.Now().Add(p.TTL),
 	})
+	if err != nil {
+		return sqlc.Session{}, err
+	}
+
+	s.bus.Publish(SSEEvent{
+		ID:         uuid.NewString(),
+		OperatorID: p.OperatorID,
+		EventType:  "session.launched",
+		Data: map[string]any{
+			"session_id": session.ID,
+			"player_id":  player.ID,
+			"expires_at": session.ExpiresAt,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	return session, nil
 }
 
 func (s *SessionsService) VerifySession(ctx context.Context, token string, operatorID int32) (sqlc.Session, error) {
-	return s.queries.VerifySessionByToken(ctx, sqlc.VerifySessionByTokenParams{
+	session, err := s.queries.VerifySessionByToken(ctx, sqlc.VerifySessionByTokenParams{
 		LaunchToken: token,
 		OperatorID:  operatorID,
 	})
+	if err != nil {
+		return sqlc.Session{}, err
+	}
+
+	s.bus.Publish(SSEEvent{
+		ID:         uuid.NewString(),
+		OperatorID: operatorID,
+		EventType:  "session.verified",
+		Data:       session,
+		CreatedAt:  time.Now(),
+	})
+
+	return session, nil
 }
 
-func (s *SessionsService) RevokeSession(ctx context.Context, id uuid.UUID) error {
-	return s.queries.RevokeSession(ctx, id)
+func (s *SessionsService) RevokeSession(ctx context.Context, id uuid.UUID, operatorID int32) error {
+	err := s.queries.RevokeSession(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	s.bus.Publish(SSEEvent{
+		ID:         uuid.NewString(),
+		OperatorID: operatorID,
+		EventType:  "session.revoked",
+		Data: map[string]any{
+			"session_id": id.String(),
+		},
+		CreatedAt: time.Now(),
+	})
+
+	return nil
 }

@@ -137,3 +137,37 @@ func (q *Queries) MarkBetAsWon(ctx context.Context, id int32) error {
 	_, err := q.db.ExecContext(ctx, markBetAsWon, id)
 	return err
 }
+
+const updateBetStatus = `-- name: UpdateBetStatus :one
+UPDATE bets
+SET
+    status = $2,
+    win_amount = $3,
+    updated_at = NOW()
+WHERE id = $1
+    RETURNING id, operator_id, player_id, round_id, amount, outcome, win_amount, status, idempotency_key, created_at
+`
+
+type UpdateBetStatusParams struct {
+	ID        int32   `json:"id"`
+	Status    string  `json:"status"`
+	WinAmount float64 `json:"win_amount"`
+}
+
+func (q *Queries) UpdateBetStatus(ctx context.Context, arg UpdateBetStatusParams) (Bet, error) {
+	row := q.db.QueryRowContext(ctx, updateBetStatus, arg.ID, arg.Status, arg.WinAmount)
+	var i Bet
+	err := row.Scan(
+		&i.ID,
+		&i.OperatorID,
+		&i.PlayerID,
+		&i.RoundID,
+		&i.Amount,
+		&i.Outcome,
+		&i.WinAmount,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+	)
+	return i, err
+}

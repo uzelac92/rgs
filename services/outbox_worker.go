@@ -2,20 +2,22 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"rgs/sqlc"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type OutboxWorker struct {
-	q      *sqlc.Queries
-	wallet *WalletClient
+	queries *sqlc.Queries
+	wallet  *WalletClient
+	bus     *EventBus
 }
 
-func NewOutboxWorker(q *sqlc.Queries, wallet *WalletClient) *OutboxWorker {
-	return &OutboxWorker{q: q, wallet: wallet}
+func NewOutboxWorker(q *sqlc.Queries, wallet *WalletClient, bus *EventBus) *OutboxWorker {
+	return &OutboxWorker{queries: q, wallet: wallet, bus: bus}
 }
 
 func (w *OutboxWorker) Start() {
@@ -30,7 +32,7 @@ func (w *OutboxWorker) Start() {
 func (w *OutboxWorker) processPending() {
 	ctx := context.Background()
 
-	events, err := w.q.GetPendingOutbox(ctx)
+	events, err := w.queries.GetPendingOutbox(ctx)
 	if err != nil {
 		log.Println("failed to fetch outbox:", err)
 		return
@@ -38,21 +40,72 @@ func (w *OutboxWorker) processPending() {
 
 	for _, e := range events {
 		creditKey := fmt.Sprintf("bet-%d-retry-%d", e.BetID, e.ID)
+		if w.bus != nil {
+			w.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: e.OperatorID,
+				EventType:  "settlement.retry",
+				Data: map[string]any{
+					"bet_id":    e.BetID,
+					"player_id": e.PlayerID,
+					"amount":    e.Amount,
+					"outbox_id": e.ID,
+					"retry_key": creditKey,
+				},
+				CreatedAt: time.Now(),
+			})
+		}
 
-		ok, err := w.wallet.Credit(ctx, e.PlayerID, e.Amount, creditKey)
-		if err != nil || !ok {
-			log.Println("retry credit failed:", err)
+		ok, errCredit := w.wallet.Credit(ctx, e.PlayerID, e.Amount, creditKey)
+		if errCredit != nil || !ok {
+			log.Println("retry credit failed:", errCredit)
+
+			errorMsg := "wallet declined"
+			if errCredit != nil {
+				errorMsg = errCredit.Error()
+			}
+
+			if w.bus != nil {
+				w.bus.Publish(SSEEvent{
+					ID:         uuid.NewString(),
+					OperatorID: e.OperatorID,
+					EventType:  "settlement.failed",
+					Data: map[string]any{
+						"bet_id":    e.BetID,
+						"player_id": e.PlayerID,
+						"amount":    e.Amount,
+						"error":     errorMsg,
+						"outbox_id": e.ID,
+					},
+					CreatedAt: time.Now(),
+				})
+			}
+
 			continue
 		}
 
-		err = w.q.MarkBetAsWon(ctx, e.BetID)
+		err = w.queries.MarkBetAsWon(ctx, e.BetID)
 		if err != nil {
 			log.Println("failed to mark bet as won:", err)
 			continue
 		}
+		if w.bus != nil {
+			w.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: e.OperatorID,
+				EventType:  "settlement.success",
+				Data: map[string]any{
+					"bet_id":    e.BetID,
+					"player_id": e.PlayerID,
+					"amount":    e.Amount,
+					"outbox_id": e.ID,
+				},
+				CreatedAt: time.Now(),
+			})
+		}
 
-		_, _ = w.q.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{
-			OperatorID: sql.NullInt32{Int32: e.OperatorID, Valid: true},
+		_, _ = w.queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{
+			OperatorID: e.OperatorID,
 			EventType:  "settlement_success",
 			Payload: []byte(fmt.Sprintf(`{
 						"bet_id": %d,
@@ -63,7 +116,7 @@ func (w *OutboxWorker) processPending() {
 					}`, e.BetID, e.Amount, e.PlayerID)),
 		})
 
-		_, err = w.q.MarkOutboxProcessed(ctx, e.ID)
+		_, err = w.queries.MarkOutboxProcessed(ctx, e.ID)
 		if err != nil {
 			log.Println("failed to mark outbox processed:", err)
 		}

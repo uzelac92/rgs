@@ -6,20 +6,20 @@ import (
 )
 
 type WebhookService struct {
-	q *sqlc.Queries
+	queries *sqlc.Queries
 }
 
 func NewWebhookService(q *sqlc.Queries) *WebhookService {
-	return &WebhookService{q: q}
+	return &WebhookService{queries: q}
 }
 
 func (s *WebhookService) RetryWebhook(ctx context.Context, id int32) error {
-	_, err := s.q.GetWebhookEventByID(ctx, id)
+	_, err := s.queries.GetWebhookEventByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	return s.q.ResetWebhookForRetry(ctx, id)
+	return s.queries.ResetWebhookForRetry(ctx, id)
 }
 
 func (s *WebhookService) ListWebhooks(
@@ -28,10 +28,10 @@ func (s *WebhookService) ListWebhooks(
 	status *string,
 ) ([]sqlc.WebhookEvent, error) {
 	if status == nil {
-		return s.q.ListWebhooksByOperator(ctx, operatorID)
+		return s.queries.ListWebhooksByOperator(ctx, operatorID)
 	}
 
-	return s.q.ListWebhooksByOperatorStatus(ctx, sqlc.ListWebhooksByOperatorStatusParams{
+	return s.queries.ListWebhooksByOperatorStatus(ctx, sqlc.ListWebhooksByOperatorStatusParams{
 		OperatorID: operatorID,
 		Status:     *status,
 	})

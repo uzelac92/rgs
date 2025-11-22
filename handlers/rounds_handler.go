@@ -11,15 +11,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type RoundsReadHandler struct {
-	q *sqlc.Queries
+type RoundsHandler struct {
+	queries *sqlc.Queries
 }
 
-func NewRoundsReadHandler(q *sqlc.Queries) *RoundsReadHandler {
-	return &RoundsReadHandler{q: q}
+func NewRoundsHandler(q *sqlc.Queries) *RoundsHandler {
+	return &RoundsHandler{queries: q}
 }
 
-func (h *RoundsReadHandler) GetRound(w http.ResponseWriter, r *http.Request) {
+func (h *RoundsHandler) GetRound(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
 		http.Error(w, "missing round id", http.StatusBadRequest)
@@ -32,7 +32,7 @@ func (h *RoundsReadHandler) GetRound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	round, err := h.q.GetRound(r.Context(), int32(id))
+	round, err := h.queries.GetRound(r.Context(), int32(id))
 	if err != nil {
 		http.Error(w, "round not found", http.StatusNotFound)
 		return

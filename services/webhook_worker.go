@@ -6,15 +6,19 @@ import (
 	"log"
 	"rgs/sqlc"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type WebhookWorker struct {
-	q *sqlc.Queries
+	queries *sqlc.Queries
+	bus     *EventBus
 }
 
-func NewWebhookWorker(q *sqlc.Queries) *WebhookWorker {
+func NewWebhookWorker(q *sqlc.Queries, bus *EventBus) *WebhookWorker {
 	return &WebhookWorker{
-		q: q,
+		queries: q,
+		bus:     bus,
 	}
 }
 
@@ -30,22 +34,22 @@ func (w *WebhookWorker) Start() {
 func (w *WebhookWorker) processPending() {
 	ctx := context.Background()
 
-	events, err := w.q.GetPendingWebhookEvents(ctx)
+	events, err := w.queries.GetPendingWebhookEvents(ctx)
 	if err != nil {
 		log.Println("failed to fetch pending webhook events:", err)
 		return
 	}
 
 	for _, ev := range events {
-		event, err := w.q.MarkWebhookProcessing(ctx, ev.ID)
+		event, err := w.queries.MarkWebhookProcessing(ctx, ev.ID)
 		if err != nil {
 			log.Println("failed to lock webhook event:", err)
 			continue
 		}
 
-		operator, err := w.q.GetOperatorByID(ctx, event.OperatorID)
+		operator, err := w.queries.GetOperatorByID(ctx, event.OperatorID)
 		if err != nil || operator.WebhookUrl == "" {
-			_ = w.q.MarkWebhookFailed(ctx, sqlc.MarkWebhookFailedParams{
+			_ = w.queries.MarkWebhookFailed(ctx, sqlc.MarkWebhookFailedParams{
 				ID: event.ID,
 				ErrorMessage: sql.NullString{
 					String: "operator not found or no webhook_url",
@@ -56,7 +60,7 @@ func (w *WebhookWorker) processPending() {
 		}
 
 		if time.Since(event.CreatedAt) > time.Minute {
-			_ = w.q.MarkWebhookFailed(ctx, sqlc.MarkWebhookFailedParams{
+			_ = w.queries.MarkWebhookFailed(ctx, sqlc.MarkWebhookFailedParams{
 				ID: event.ID,
 				ErrorMessage: sql.NullString{
 					String: "retry window exceeded",
@@ -66,18 +70,31 @@ func (w *WebhookWorker) processPending() {
 			continue
 		}
 
-		client := NewWebhookClient(operator.WebhookSecret)
+		if w.bus != nil {
+			w.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: event.OperatorID,
+				EventType:  "webhook.retry",
+				Data: map[string]any{
+					"event_id":   event.ID,
+					"event_type": event.EventType,
+					"retries":    event.Retries,
+				},
+				CreatedAt: time.Now(),
+			})
+		}
 
+		client := NewWebhookClient(operator.WebhookSecret)
 		err = client.Send(ctx, operator.WebhookUrl, event.Payload)
 		if err == nil {
-			_ = w.q.MarkWebhookCompleted(ctx, event.ID)
+			_ = w.queries.MarkWebhookCompleted(ctx, event.ID)
 			continue
 		}
 
 		delay := nextRetryDelay(event.Retries)
 		next := time.Now().Add(delay)
 
-		_, _ = w.q.UpdateWebhookRetry(ctx, sqlc.UpdateWebhookRetryParams{
+		_, _ = w.queries.UpdateWebhookRetry(ctx, sqlc.UpdateWebhookRetryParams{
 			ID:          event.ID,
 			NextRetryAt: next,
 			ErrorMessage: sql.NullString{
@@ -85,6 +102,21 @@ func (w *WebhookWorker) processPending() {
 				Valid:  true,
 			},
 		})
+
+		if w.bus != nil {
+			w.bus.Publish(SSEEvent{
+				ID:         uuid.NewString(),
+				OperatorID: event.OperatorID,
+				EventType:  "webhook.failed",
+				Data: map[string]any{
+					"event_id":   event.ID,
+					"event_type": event.EventType,
+					"error":      err.Error(),
+					"retry_in":   delay.Seconds(),
+				},
+				CreatedAt: time.Now(),
+			})
+		}
 	}
 }
 

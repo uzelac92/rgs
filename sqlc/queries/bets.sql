@@ -22,3 +22,12 @@ UPDATE bets
 SET status = 'won'
 WHERE id = $1
     RETURNING *;
+
+-- name: UpdateBetStatus :one
+UPDATE bets
+SET
+    status = $2,
+    win_amount = $3,
+    updated_at = NOW()
+WHERE id = $1
+    RETURNING *;

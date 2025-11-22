@@ -15,7 +15,7 @@ import (
 const createOperator = `-- name: CreateOperator :one
 INSERT INTO operators (name, api_key)
 VALUES ($1, $2)
-    RETURNING id, name, api_key, created_at
+    RETURNING id, name, api_key, webhook_url, webhook_secret, created_at
 `
 
 type CreateOperatorParams struct {
@@ -30,6 +30,8 @@ func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) 
 		&i.ID,
 		&i.Name,
 		&i.ApiKey,
+		&i.WebhookUrl,
+		&i.WebhookSecret,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -96,7 +98,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const getOperatorByApiKey = `-- name: GetOperatorByApiKey :one
-SELECT id, name, api_key, created_at FROM operators
+SELECT id, name, api_key, webhook_url, webhook_secret, created_at FROM operators
 WHERE api_key = $1
     LIMIT 1
 `
@@ -108,6 +110,26 @@ func (q *Queries) GetOperatorByApiKey(ctx context.Context, apiKey string) (Opera
 		&i.ID,
 		&i.Name,
 		&i.ApiKey,
+		&i.WebhookUrl,
+		&i.WebhookSecret,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getOperatorByID = `-- name: GetOperatorByID :one
+SELECT id, name, api_key, webhook_url, webhook_secret, created_at FROM operators WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetOperatorByID(ctx context.Context, id int32) (Operator, error) {
+	row := q.db.QueryRowContext(ctx, getOperatorByID, id)
+	var i Operator
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ApiKey,
+		&i.WebhookUrl,
+		&i.WebhookSecret,
 		&i.CreatedAt,
 	)
 	return i, err

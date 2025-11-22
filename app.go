@@ -22,6 +22,10 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 	outboxWorker := services.NewOutboxWorker(queries, walletClient)
 	outboxWorker.Start()
 
+	// Start async webhook worker
+	webhookWorker := services.NewWebhookWorker(queries)
+	webhookWorker.Start()
+
 	// Services (business logic)
 	sessionsSvc := services.NewSessionsService(queries)
 	betAgg := services.NewBetAggregate(queries, walletClient)

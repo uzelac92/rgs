@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"rgs/game"
@@ -114,6 +116,36 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 		return sqlc.Round{}, sqlc.Bet{}, err
 	}
 
+	switch status {
+
+	case "won":
+		b.emitWebhookEvent(ctx, p.OperatorID, "settlement_success", map[string]interface{}{
+			"bet_id":    bet.ID,
+			"round_id":  round.ID,
+			"amount":    winAmount,
+			"status":    "won",
+			"player_id": p.PlayerID,
+		})
+
+	case "pending_settlement":
+		b.emitWebhookEvent(ctx, p.OperatorID, "settlement_pending", map[string]interface{}{
+			"bet_id":    bet.ID,
+			"round_id":  round.ID,
+			"amount":    winAmount,
+			"status":    "pending",
+			"player_id": p.PlayerID,
+		})
+
+	case "lost":
+		b.emitWebhookEvent(ctx, p.OperatorID, "settlement_lost", map[string]interface{}{
+			"bet_id":    bet.ID,
+			"round_id":  round.ID,
+			"amount":    0,
+			"status":    "lost",
+			"player_id": p.PlayerID,
+		})
+	}
+
 	if status == "pending_settlement" {
 		_, _ = b.queries.InsertOutbox(ctx, sqlc.InsertOutboxParams{
 			BetID:      bet.ID,
@@ -124,4 +156,17 @@ func (b *BetAggregate) PlaceBet(ctx context.Context, p PlaceBetParams) (sqlc.Rou
 	}
 
 	return round, bet, nil
+}
+
+func (b *BetAggregate) emitWebhookEvent(ctx context.Context, operatorID int32, eventType string, payload interface{}) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	_, _ = b.queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{
+		OperatorID: sql.NullInt32{Int32: operatorID, Valid: true},
+		EventType:  eventType,
+		Payload:    raw,
+	})
 }

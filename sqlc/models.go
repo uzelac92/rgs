@@ -6,6 +6,7 @@ package sqlc
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,10 +26,12 @@ type Bet struct {
 }
 
 type Operator struct {
-	ID        int32     `json:"id"`
-	Name      string    `json:"name"`
-	ApiKey    string    `json:"api_key"`
-	CreatedAt time.Time `json:"created_at"`
+	ID            int32     `json:"id"`
+	Name          string    `json:"name"`
+	ApiKey        string    `json:"api_key"`
+	WebhookUrl    string    `json:"webhook_url"`
+	WebhookSecret string    `json:"webhook_secret"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type Outbox struct {
@@ -67,4 +70,17 @@ type Session struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 	Revoked     bool      `json:"revoked"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type WebhookEvent struct {
+	ID           int32           `json:"id"`
+	OperatorID   sql.NullInt32   `json:"operator_id"`
+	EventType    string          `json:"event_type"`
+	Payload      json.RawMessage `json:"payload"`
+	Status       string          `json:"status"`
+	Retries      int32           `json:"retries"`
+	NextRetryAt  time.Time       `json:"next_retry_at"`
+	ErrorMessage sql.NullString  `json:"error_message"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }

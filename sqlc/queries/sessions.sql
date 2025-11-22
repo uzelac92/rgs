@@ -8,6 +8,9 @@ SELECT * FROM operators
 WHERE api_key = $1
     LIMIT 1;
 
+-- name: GetOperatorByID :one
+SELECT * FROM operators WHERE id = $1 LIMIT 1;
+
 -- name: CreatePlayer :one
 INSERT INTO players (operator_id, external_player_id, jurisdiction)
 VALUES ($1, $2, $3)

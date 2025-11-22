@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"rgs/sqlc"
@@ -49,6 +50,18 @@ func (w *OutboxWorker) processPending() {
 			log.Println("failed to mark bet as won:", err)
 			continue
 		}
+
+		_, _ = w.q.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{
+			OperatorID: sql.NullInt32{Int32: e.OperatorID, Valid: true},
+			EventType:  "settlement_success",
+			Payload: []byte(fmt.Sprintf(`{
+						"bet_id": %d,
+						"round_id": 0,
+						"amount": %.2f,
+						"status": "won",
+						"player_id": %d
+					}`, e.BetID, e.Amount, e.PlayerID)),
+		})
 
 		_, err = w.q.MarkOutboxProcessed(ctx, e.ID)
 		if err != nil {

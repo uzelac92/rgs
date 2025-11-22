@@ -3,6 +3,8 @@ CREATE TABLE operators (
    id SERIAL PRIMARY KEY,
    name TEXT NOT NULL,
    api_key TEXT UNIQUE NOT NULL,
+   webhook_url TEXT NOT NULL,
+   webhook_secret TEXT NOT NULL,
    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -61,4 +63,17 @@ CREATE TABLE outbox (
     amount NUMERIC(18,2) NOT NULL,
     created_at TIMESTAMP DEFAULT now(),
     processed BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE webhook_events (
+    id SERIAL PRIMARY KEY,
+    operator_id INT REFERENCES operators(id),
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    retries INT NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    error_message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

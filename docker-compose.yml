@@ -24,7 +24,7 @@ services:
       "-database=postgres://rgs:rgs@postgres:5432/rgs?sslmode=disable",
       "up"
     ]
-    restart: "on-failure"   # Run once, retry if DB isn’t ready
+    restart: "on-failure"
 
   walletmock:
     build:

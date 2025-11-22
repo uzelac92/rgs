@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY . .
 
-# Build the mock from its subfolder
 RUN go build -o walletmock ./walletmock
 
 FROM alpine:3.19

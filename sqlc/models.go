@@ -74,7 +74,7 @@ type Session struct {
 
 type WebhookEvent struct {
 	ID           int32           `json:"id"`
-	OperatorID   sql.NullInt32   `json:"operator_id"`
+	OperatorID   int32           `json:"operator_id"`
 	EventType    string          `json:"event_type"`
 	Payload      json.RawMessage `json:"payload"`
 	Status       string          `json:"status"`

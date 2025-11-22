@@ -15,3 +15,18 @@ UPDATE outbox
 SET processed = TRUE
 WHERE id = $1
     RETURNING *;
+
+-- name: ListOutboxByOperator :many
+SELECT *
+FROM outbox
+WHERE operator_id = $1
+ORDER BY id DESC
+    LIMIT 200;
+
+-- name: ListOutboxByOperatorStatus :many
+SELECT *
+FROM outbox
+WHERE operator_id = $1
+  AND processed = $2
+ORDER BY id DESC
+    LIMIT 200;

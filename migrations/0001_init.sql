@@ -67,7 +67,7 @@ CREATE TABLE outbox (
 
 CREATE TABLE webhook_events (
     id SERIAL PRIMARY KEY,
-    operator_id INT REFERENCES operators(id),
+    operator_id INT NOT NULL REFERENCES operators(id),
     event_type TEXT NOT NULL,
     payload JSONB NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',

@@ -55,21 +55,46 @@ func (q *Queries) GetPendingWebhookEvents(ctx context.Context) ([]WebhookEvent, 
 	return items, nil
 }
 
+const getWebhookEventByID = `-- name: GetWebhookEventByID :one
+SELECT id, operator_id, event_type, payload, status, retries, next_retry_at, error_message, created_at, updated_at
+FROM webhook_events
+WHERE id = $1
+    LIMIT 1
+`
+
+func (q *Queries) GetWebhookEventByID(ctx context.Context, id int32) (WebhookEvent, error) {
+	row := q.db.QueryRowContext(ctx, getWebhookEventByID, id)
+	var i WebhookEvent
+	err := row.Scan(
+		&i.ID,
+		&i.OperatorID,
+		&i.EventType,
+		&i.Payload,
+		&i.Status,
+		&i.Retries,
+		&i.NextRetryAt,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertWebhookEvent = `-- name: InsertWebhookEvent :one
 INSERT INTO webhook_events (
-operator_id,
-event_type,
-payload,
-status,
-retries,
-next_retry_at
-)
+    operator_id,
+    event_type,
+    payload,
+    status,
+    retries,
+    next_retry_at
+    )
 VALUES ($1, $2, $3, 'pending', 0, NOW())
 RETURNING id, operator_id, event_type, payload, status, retries, next_retry_at, error_message, created_at, updated_at
 `
 
 type InsertWebhookEventParams struct {
-	OperatorID sql.NullInt32   `json:"operator_id"`
+	OperatorID int32           `json:"operator_id"`
 	EventType  string          `json:"event_type"`
 	Payload    json.RawMessage `json:"payload"`
 }
@@ -92,10 +117,100 @@ func (q *Queries) InsertWebhookEvent(ctx context.Context, arg InsertWebhookEvent
 	return i, err
 }
 
+const listWebhooksByOperator = `-- name: ListWebhooksByOperator :many
+SELECT id, operator_id, event_type, payload, status, retries, next_retry_at, error_message, created_at, updated_at
+FROM webhook_events
+WHERE operator_id = $1
+ORDER BY id DESC
+    LIMIT 200
+`
+
+func (q *Queries) ListWebhooksByOperator(ctx context.Context, operatorID int32) ([]WebhookEvent, error) {
+	rows, err := q.db.QueryContext(ctx, listWebhooksByOperator, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookEvent
+	for rows.Next() {
+		var i WebhookEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperatorID,
+			&i.EventType,
+			&i.Payload,
+			&i.Status,
+			&i.Retries,
+			&i.NextRetryAt,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWebhooksByOperatorStatus = `-- name: ListWebhooksByOperatorStatus :many
+SELECT id, operator_id, event_type, payload, status, retries, next_retry_at, error_message, created_at, updated_at
+FROM webhook_events
+WHERE operator_id = $1
+  AND status = $2
+ORDER BY id DESC
+    LIMIT 200
+`
+
+type ListWebhooksByOperatorStatusParams struct {
+	OperatorID int32  `json:"operator_id"`
+	Status     string `json:"status"`
+}
+
+func (q *Queries) ListWebhooksByOperatorStatus(ctx context.Context, arg ListWebhooksByOperatorStatusParams) ([]WebhookEvent, error) {
+	rows, err := q.db.QueryContext(ctx, listWebhooksByOperatorStatus, arg.OperatorID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookEvent
+	for rows.Next() {
+		var i WebhookEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperatorID,
+			&i.EventType,
+			&i.Payload,
+			&i.Status,
+			&i.Retries,
+			&i.NextRetryAt,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markWebhookCompleted = `-- name: MarkWebhookCompleted :exec
 UPDATE webhook_events
 SET status = 'completed',
-updated_at = NOW()
+    updated_at = NOW()
 WHERE id = $1
 `
 
@@ -107,8 +222,8 @@ func (q *Queries) MarkWebhookCompleted(ctx context.Context, id int32) error {
 const markWebhookFailed = `-- name: MarkWebhookFailed :exec
 UPDATE webhook_events
 SET status = 'failed',
-updated_at = NOW(),
-error_message = $2
+    updated_at = NOW(),
+    error_message = $2
 WHERE id = $1
 `
 
@@ -126,7 +241,7 @@ const markWebhookProcessing = `-- name: MarkWebhookProcessing :one
 
 UPDATE webhook_events
 SET status = 'processing',
-updated_at = NOW()
+    updated_at = NOW()
 WHERE id = $1
 RETURNING id, operator_id, event_type, payload, status, retries, next_retry_at, error_message, created_at, updated_at
 `
@@ -150,13 +265,29 @@ func (q *Queries) MarkWebhookProcessing(ctx context.Context, id int32) (WebhookE
 	return i, err
 }
 
+const resetWebhookForRetry = `-- name: ResetWebhookForRetry :exec
+UPDATE webhook_events
+SET
+    status = 'pending',
+    retries = 0,
+    next_retry_at = NOW(),
+    error_message = NULL,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) ResetWebhookForRetry(ctx context.Context, id int32) error {
+	_, err := q.db.ExecContext(ctx, resetWebhookForRetry, id)
+	return err
+}
+
 const updateWebhookRetry = `-- name: UpdateWebhookRetry :one
 UPDATE webhook_events
 SET retries = retries + 1,
-next_retry_at = $2,
-status = 'pending',
-updated_at = NOW(),
-error_message = $3
+    next_retry_at = $2,
+    status = 'pending',
+    updated_at = NOW(),
+    error_message = $3
 WHERE id = $1
 RETURNING id, operator_id, event_type, payload, status, retries, next_retry_at, error_message, created_at, updated_at
 `

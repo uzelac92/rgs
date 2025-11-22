@@ -29,10 +29,14 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 	// Services (business logic)
 	sessionsSvc := services.NewSessionsService(queries)
 	betAgg := services.NewBetAggregate(queries, walletClient)
+	webhookSvc := services.NewWebhookService(queries)
+	outboxSvc := services.NewOutboxService(queries)
 
 	// Handlers
 	sessionsWrite := handlers.NewSessionsWriteHandler(sessionsSvc)
 	sessionsRead := handlers.NewSessionsReadHandler(sessionsSvc)
+	webhookHandler := handlers.NewWebhookHandler(webhookSvc)
+	outboxHandler := handlers.NewOutboxHandler(outboxSvc)
 
 	betsWrite := handlers.NewBetsWriteHandler(betAgg)
 	roundsRead := handlers.NewRoundsReadHandler(queries)
@@ -52,6 +56,13 @@ func BuildApp(db *sql.DB, cfg Config) *chi.Mux {
 
 	// Rounds
 	r.Get("/rounds/{id}", roundsRead.GetRound)
+
+	// Webhooks
+	r.Get("/webhooks", webhookHandler.ListWebhooks)
+	r.Post("/webhooks/retry/{id}", webhookHandler.RetryWebhook)
+
+	// Outbox
+	r.Get("/outbox", outboxHandler.ListOutbox)
 
 	return r
 }

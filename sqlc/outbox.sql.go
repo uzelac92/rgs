@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
 
 const getPendingOutbox = `-- name: GetPendingOutbox :many
@@ -79,6 +80,90 @@ func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) (Out
 		&i.Processed,
 	)
 	return i, err
+}
+
+const listOutboxByOperator = `-- name: ListOutboxByOperator :many
+SELECT id, bet_id, operator_id, player_id, amount, created_at, processed
+FROM outbox
+WHERE operator_id = $1
+ORDER BY id DESC
+    LIMIT 200
+`
+
+func (q *Queries) ListOutboxByOperator(ctx context.Context, operatorID int32) ([]Outbox, error) {
+	rows, err := q.db.QueryContext(ctx, listOutboxByOperator, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Outbox
+	for rows.Next() {
+		var i Outbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.BetID,
+			&i.OperatorID,
+			&i.PlayerID,
+			&i.Amount,
+			&i.CreatedAt,
+			&i.Processed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOutboxByOperatorStatus = `-- name: ListOutboxByOperatorStatus :many
+SELECT id, bet_id, operator_id, player_id, amount, created_at, processed
+FROM outbox
+WHERE operator_id = $1
+  AND processed = $2
+ORDER BY id DESC
+    LIMIT 200
+`
+
+type ListOutboxByOperatorStatusParams struct {
+	OperatorID int32        `json:"operator_id"`
+	Processed  sql.NullBool `json:"processed"`
+}
+
+func (q *Queries) ListOutboxByOperatorStatus(ctx context.Context, arg ListOutboxByOperatorStatusParams) ([]Outbox, error) {
+	rows, err := q.db.QueryContext(ctx, listOutboxByOperatorStatus, arg.OperatorID, arg.Processed)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Outbox
+	for rows.Next() {
+		var i Outbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.BetID,
+			&i.OperatorID,
+			&i.PlayerID,
+			&i.Amount,
+			&i.CreatedAt,
+			&i.Processed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markOutboxProcessed = `-- name: MarkOutboxProcessed :one

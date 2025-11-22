@@ -43,18 +43,7 @@ func (w *WebhookWorker) processPending() {
 			continue
 		}
 
-		if !event.OperatorID.Valid {
-			_ = w.q.MarkWebhookFailed(ctx, sqlc.MarkWebhookFailedParams{
-				ID: event.ID,
-				ErrorMessage: sql.NullString{
-					String: "operator_id null",
-					Valid:  true,
-				},
-			})
-			continue
-		}
-
-		operator, err := w.q.GetOperatorByID(ctx, event.OperatorID.Int32)
+		operator, err := w.q.GetOperatorByID(ctx, event.OperatorID)
 		if err != nil || operator.WebhookUrl == "" {
 			_ = w.q.MarkWebhookFailed(ctx, sqlc.MarkWebhookFailedParams{
 				ID: event.ID,
@@ -78,6 +67,7 @@ func (w *WebhookWorker) processPending() {
 		}
 
 		client := NewWebhookClient(operator.WebhookSecret)
+
 		err = client.Send(ctx, operator.WebhookUrl, event.Payload)
 		if err == nil {
 			_ = w.q.MarkWebhookCompleted(ctx, event.ID)

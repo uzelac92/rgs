@@ -1,6 +1,6 @@
 package main
 
 func main() {
-	server := NewServer() // from server.go
+	server := NewServer()
 	server.Run()
 }
